@@ -1,65 +1,117 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Painel de Torres</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Painel de Torres — PWA</title>
 
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- PWA iPhone support -->
+  <!-- PWA / iOS -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1677ff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="apple-touch-icon" href="/icon-192.png">
 
-  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/style.css">
 
-  <!-- Service Worker -->
   <script>
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js");
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch(()=>console.warn('SW registration failed'));
     }
   </script>
-
-  <link rel="stylesheet" href="/style.css">
 </head>
-
 <body>
 
-<header class="top-bar">
-  <h2>🛰️ Painel de Status das Torres</h2>
-  <button onclick="syncNow()" class="btn">🔄 Sincronizar</button>
+<header class="topbar">
+  <div class="topbar-left">
+    <img src="/icon-192.png" alt="" width="36">
+    <h1>Painel de Torres</h1>
+  </div>
+  <div class="topbar-right">
+    <button id="btnSync" class="btn small">🔄</button>
+  </div>
 </header>
 
-<div id="list"></div>
+<main class="main">
+  <section class="controls">
+    <select id="filterStatus" aria-label="Filtrar status">
+      <option value="all">Todos</option>
+      <option value="Operando">Operando</option>
+      <option value="Falha">Falha</option>
+      <option value="Offline">Offline</option>
+    </select>
 
-<button class="add-btn" onclick="openAdd()">+ Adicionar Torre</button>
+    <div class="search-row">
+      <input id="searchInput" placeholder="Procurar torre..." />
+      <button id="btnRefresh" class="btn">Atualizar</button>
+    </div>
+  </section>
 
-<!-- Modal -->
-<div id="modal" class="modal hidden">
+  <section id="towers-panel" class="list"></section>
+
+  <button id="addBtn" class="fab">＋</button>
+</main>
+
+<!-- Edit Modal -->
+<div id="editModal" class="modal" aria-hidden="true">
   <div class="modal-card">
-    <h3 id="modalTitle">Editar Torre</h3>
+    <h2 id="editTitle">Editar Torre</h2>
 
     <label>Torre</label>
-    <input id="mTorre">
+    <input id="editTorre" disabled>
+
+    <label>Localização</label>
+    <input id="editLocalizacao">
 
     <label>Status</label>
-    <select id="mStatus">
+    <select id="editStatus">
       <option>Operando</option>
       <option>Falha</option>
       <option>Offline</option>
     </select>
 
-    <label>Última Comunicação</label>
-    <input type="date" id="mCom">
-
     <label>Falha Detectada</label>
-    <input id="mFalha">
+    <input id="editFalha">
 
-    <button class="btn" onclick="save()">Salvar</button>
-    <button class="btn-danger" onclick="closeModal()">Cancelar</button>
+    <label>Ação Requerida</label>
+    <input id="editAcao">
+
+    <label>Técnico Responsável</label>
+    <input id="editTecnico">
+
+    <label>Data Últ. Manutenção</label>
+    <input id="editDataManutencao" type="date">
+
+    <label>Custo (R$)</label>
+    <input id="editCusto" type="number" step="0.01">
+
+    <label>Peças Utilizadas</label>
+    <input id="editPecas">
+
+    <label>Próxima Manutenção</label>
+    <input id="editProxManutencao" type="date">
+
+    <label>Pendência de Serviço</label>
+    <textarea id="editPendServico"></textarea>
+
+    <label>Pendência de Material</label>
+    <textarea id="editPendMaterial"></textarea>
+
+    <label>Observações</label>
+    <textarea id="editObs"></textarea>
+
+    <div class="modal-actions">
+      <button id="saveEdit" class="btn">Salvar</button>
+      <button id="cancelEdit" class="btn danger">Cancelar</button>
+      <button id="reportBtn" class="btn">📄 Relatório</button>
+    </div>
   </div>
 </div>
 
-<script src="/script.js"></script>
+<!-- Offline fallback page link (cached) -->
+<div id="offlineBanner" class="offline-banner hidden">Você está offline — usando dados locais.</div>
+
+<script src="/idb.js"></script>
+<script src="/app.js"></script>
 </body>
 </html>
