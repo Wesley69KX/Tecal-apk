@@ -1,0 +1,51 @@
+/* simplified and extracted styles */
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #f0f2f5;
+  color: #333;
+  margin: 0;
+  padding: 0;
+}
+.container {
+  max-width: 1500px;
+  margin: 25px auto;
+  padding: 25px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+}
+/* header */
+.header { display:flex; flex-direction:column; gap:12px; border-bottom:2px solid #0066cc; padding-bottom:15px; margin-bottom:20px;}
+.header-title { display:flex; align-items:center; gap:15px;}
+h1 { margin:0; font-size:2.1rem; color:#0066cc; font-weight:700;}
+.controls { display:flex; flex-wrap:wrap; gap:15px; background:#e9eef3; padding:14px; border-radius:10px; border:1px solid #cfd8e3;}
+select, input, button { padding:10px 14px; border-radius:10px; border:1px solid #ccd3db; background:#fff; font-size:0.95rem; color:#333; cursor:pointer;}
+button.btn { background:#0066cc; color:#fff; font-weight:600; border:none;}
+button.btn:hover { background:#004c99;}
+#towers-panel { display:grid; grid-template-columns: repeat(2, 1fr); gap:22px;}
+@media(max-width:900px){ #towers-panel{ grid-template-columns:1fr;} }
+.tower-card { background:#fff; border-radius:14px; padding:22px; box-shadow:0 5px 12px rgba(0,0,0,0.08); border:1px solid #d9dfe6; transition:0.25s;}
+.tower-card:hover { transform: translateY(-3px); box-shadow:0 8px 18px rgba(0,0,0,0.10); }
+.tower-card.alert-pending { border:3px solid #ffca28 !important; background:#fff8d1 !important; box-shadow:0 0 12px rgba(255,193,7,0.45) !important; }
+.pend-banner { font-size:0.90rem; padding:8px; margin-bottom:12px; border-radius:6px; background:#ffe9a3; border:1px solid #e6b800; font-weight:600; color:#664d00; }
+.card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.title-area h2 { margin:0; font-size:1.45rem; font-weight:700; color:#0066cc; }
+.status-pill { padding:6px 15px; border-radius:50px; font-size:0.85rem; font-weight:700; color:#fff; }
+.status-Operando { background:#28a745; }
+.status-Falha { background:#dc3545; }
+.status-Offline { background:#ff9800; }
+.section-box { background:#f9fafc; border:1px solid #d9dfe6; padding:15px; border-radius:10px; margin-top:12px; }
+.section-title { font-size:1rem; font-weight:700; color:#0066cc; margin-bottom:10px; }
+.row { display:flex; justify-content:space-between; padding:4px 0; font-size:0.93rem; }
+.row strong { min-width:155px; color:#333; }
+.edit-btn { margin-top:14px; padding:10px 16px; background:#0066cc; color:#fff; border-radius:10px; border:none; font-weight:600; cursor:pointer; }
+.edit-btn:hover { background:#004c99; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: none; align-items: center; justify-content: center; z-index: 9999; }
+.modal.show { display:flex; }
+.modal-card { width:600px; max-width:95%; background:#fff; padding:25px; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.20); max-height:90vh; overflow-y:auto; }
+.modal-card h3 { margin-top:0; color:#0066cc; }
+.modal-card label { font-weight:600; margin-bottom:4px; display:block; }
+.modal-card input, .modal-card select, .modal-card textarea { width:100%; padding:10px; border:1px solid #ccd3db; border-radius:8px; background:#fff; margin-bottom:12px; font-size:0.95rem; }
+.modal-actions { display:flex; justify-content:flex-end; gap:10px; }
+.btn-danger { background:#d9534f; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer; }
+.btn-danger:hover { background:#b52b27; }
