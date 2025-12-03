@@ -1,13 +1,8 @@
-// Simulação de Backend para Vercel Serverless
-// NOTA: Em produção, conecte isso a um banco real (Postgres/Supabase/MongoDB).
-// O sistema de arquivos do Vercel é somente leitura (read-only) em tempo de execução,
-// então as alterações aqui não persistirão permanentemente entre deploys.
+// Simulação de Backend - Em produção, use um banco de dados real (ex: Supabase/Postgres)
 
-let memoryDb = [
-  { id: 1700000000001, nome: "Torre Alpha", status: "Online", bateria: "98%", local: "Setor Norte" },
-  { id: 1700000000002, nome: "Torre Beta", status: "Offline", bateria: "12%", local: "Setor Sul" },
-  { id: 1700000000003, nome: "Torre Gamma", status: "Manutenção", bateria: "100%", local: "Centro" }
-];
+// Array vazio inicial. O front-end é responsável por popular os dados iniciais (01-25)
+// e sincronizar para cá.
+let memoryDb = [];
 
 export default function handler(req, res) {
   if (req.method === 'GET') {
@@ -15,10 +10,8 @@ export default function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    // Recebe itens da Outbox ou um array completo
     const data = req.body;
     
-    // Lógica simples de merge (em um DB real, usaria UPSERT)
     if (Array.isArray(data)) {
         data.forEach(item => {
             const index = memoryDb.findIndex(t => t.id === item.id);
@@ -30,7 +23,8 @@ export default function handler(req, res) {
         });
     }
 
-    return res.status(200).json({ success: true, message: "Sincronizado", currentData: memoryDb });
+    // Em um cenário real, você não retornaria todo o DB, apenas confirmação.
+    return res.status(200).json({ success: true, message: "Dados sincronizados", count: memoryDb.length });
   }
 
   return res.status(405).json({ error: "Method not allowed" });
