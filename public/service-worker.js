@@ -1,38 +1,54 @@
 const CACHE_NAME = 'torres-pwa-v1';
 const ASSETS = [
-  '/', '/index.html', '/style.css', '/app.js', '/idb.js',
-  '/manifest.json', '/offline.html', '/icon-192.png', '/icon-512.png'
+  '/',
+  '/index.html',
+  '/style.css',
+  '/app.js',
+  '/idb.js',
+  '/manifest.json',
+  '/offline.html',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
 ];
 
-self.addEventListener('install', e=>{
-  e.waitUntil(
-    caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS))
-  );
+// Install: Cache assets
+self.addEventListener('install', (event) => {
   self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+  );
 });
 
-self.addEventListener('activate', e=>{
-  e.waitUntil(self.clients.claim());
+// Activate: Clean old caches
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim());
 });
 
-self.addEventListener('fetch', e=>{
-  const url = new URL(e.request.url);
-  // API requests: network-first
-  if(url.pathname.startsWith('/api')){
-    e.respondWith(
-      fetch(e.request).catch(()=> caches.match('/offline.html'))
+// Fetch: Network First for API, Cache First for Assets
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // API Requests: Network First, fallback to nothing (app handles offline)
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        // Se falhar a API, apenas retorna erro 503 ou similar, 
+        // o app.js vai lidar com IndexedDB
+        return new Response(JSON.stringify({ error: 'Offline' }), { 
+            headers: { 'Content-Type': 'application/json' } 
+        });
+      })
     );
     return;
   }
 
-  // other requests: cache-first
-  e.respondWith(
-    caches.match(e.request).then(resp => resp || fetch(e.request).then(r=>{
-      // put in cache dynamically
-      return caches.open(CACHE_NAME).then(cache=>{
-        cache.put(e.request, r.clone());
-        return r;
+  // Static Assets: Cache First, fallback to Network, fallback to Offline.html
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      return cachedResponse || fetch(event.request).catch(() => {
+        if (event.request.mode === 'navigate') {
+            return caches.match('/offline.html');
+        }
       });
-    })).catch(()=> caches.match('/offline.html'))
+    })
   );
 });
