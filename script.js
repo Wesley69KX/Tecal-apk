@@ -1,57 +1,122 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbwS8_uvGOsYkGRe9QEItW1F4tE8eGEXwvHJANRwTGTmxOKJJjkaTY-qqN5bW1OEIe8/exec";
+// IndexedDB LOCAL
+let db;
+const req = indexedDB.open("torresDB", 1);
 
-// ================================
-// Carrega torres (online + offline)
-// ================================
-async function loadTowers() {
-  try {
-    const response = await fetch(API_URL + "?action=getTowers");
-    const data = await response.json();
+req.onupgradeneeded = e => {
+  db = e.target.result;
+  db.createObjectStore("torres", { keyPath: "id", autoIncrement: true });
+};
 
-    // salva no banco offline
-    saveOffline("towers", data);
+req.onsuccess = e => {
+  db = e.target.result;
+  loadLocal();
+};
 
-    renderTowers(data);
-  } catch (e) {
-    console.warn("Sem internet — usando dados offline");
+// ==============================
+// Função para listar localmente
+// ==============================
+function loadLocal() {
+  const tx = db.transaction("torres", "readonly");
+  const store = tx.objectStore("torres");
+  const req = store.getAll();
 
-    const offlineData = await loadOffline("towers");
-    if (offlineData) renderTowers(offlineData);
-  }
+  req.onsuccess = () => render(req.result);
 }
 
-// Aqui você aplica os dados na interface
-function renderTowers(data) {
-  document.getElementById("saida").innerHTML =
-    "<pre>" + JSON.stringify(data, null, 2) + "</pre>";
+function render(data) {
+  const div = document.getElementById("list");
+  div.innerHTML = "";
+
+  data.forEach(t => {
+    div.innerHTML += `
+      <div class="card">
+        <h3>${t.nome}</h3>
+        <p>Status: ${t.status}</p>
+        <p>Última comunicação: ${t.com}</p>
+        <button onclick='edit(${t.id})'>Editar</button>
+      </div>
+    `;
+  });
 }
 
-// ===================================
-// Exemplo de atualização com fallback
-// ===================================
-async function updateTower( torre, updates ) {
+// ===============
+// Abrir modal
+// ===============
+let editingId = null;
 
-  const body = {
-    Torre: torre,
-    updates: updates
+function openAdd() {
+  editingId = null;
+  document.getElementById("mTorre").value = "";
+  document.getElementById("mStatus").value = "Operando";
+  document.getElementById("mCom").value = "";
+  document.getElementById("mFalha").value = "";
+  openModal();
+}
+
+function edit(id) {
+  const tx = db.transaction("torres", "readonly");
+  const store = tx.objectStore("torres");
+  const req = store.get(id);
+
+  req.onsuccess = () => {
+    const t = req.result;
+
+    editingId = id;
+    document.getElementById("mTorre").value = t.nome;
+    document.getElementById("mStatus").value = t.status;
+    document.getElementById("mCom").value = t.com;
+    document.getElementById("mFalha").value = t.falha;
+
+    openModal();
+  };
+}
+
+function save() {
+  const data = {
+    id: editingId,
+    nome: document.getElementById("mTorre").value,
+    status: document.getElementById("mStatus").value,
+    com: document.getElementById("mCom").value,
+    falha: document.getElementById("mFalha").value
   };
 
-  try {
-    await fetch(API_URL, {
-      method: "POST",
-      body: JSON.stringify(body)
-    });
+  const tx = db.transaction("torres", "readwrite");
+  const store = tx.objectStore("torres");
 
-    // salva também offline
-    savePendingUpdate(body);
+  if (data.id) store.put(data);
+  else store.add(data);
 
-    alert("Atualizado online!");
-  } catch (e) {
-    // sem internet → salva no offline
-    savePendingUpdate(body);
-    alert("Sem internet — salvo offline para sincronizar depois.");
-  }
+  tx.oncomplete = () => {
+    closeModal();
+    loadLocal();
+  };
 }
 
-// sincronizador automático quando voltar internet
-setInterval(syncPending, 5000);
+// Modal
+function openModal() {
+  document.getElementById("modal").classList.remove("hidden");
+}
+function closeModal() {
+  document.getElementById("modal").classList.add("hidden");
+}
+
+// ==========================
+// SINCRONIZAÇÃO COM SERVIDOR
+// ==========================
+async function syncNow() {
+  const tx = db.transaction("torres", "readonly");
+  const store = tx.objectStore("torres");
+  const req = store.getAll();
+
+  req.onsuccess = async () => {
+    const localData = req.result;
+
+    await fetch("/api/towers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(localData)
+    });
+
+    alert("Sincronizado com sucesso!");
+  };
+}
