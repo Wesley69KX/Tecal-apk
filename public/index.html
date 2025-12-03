@@ -14,14 +14,17 @@
 <body>
 
     <header>
-        <h1>Gestão de Torres <span id="connection-status" class="status-badge online">Online</span></h1>
-        <div class="actions">
-            <button onclick="app.syncNow()">Sync</button>
+        <div class="header-top">
+            <h1>Gestão de Torres <span id="connection-status" class="status-badge online">Online</span></h1>
+        </div>
+        <div class="header-actions">
+            <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Relatório Geral (Todas)</button>
+            <button class="btn-sync" onclick="app.syncNow()">🔄 Sync</button>
         </div>
     </header>
 
     <div class="container">
-        <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre..." onkeyup="app.filterList()">
+        <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre (Nome, Status, Falha)..." onkeyup="app.filterList()">
         
         <div id="tower-list" class="tower-list">
             </div>
@@ -53,20 +56,11 @@
                     <h3>Informações Gerais</h3>
                     <label>Localização (CDS)</label>
                     <input type="text" id="f-geral-local">
-                    
                     <div class="two-col">
-                        <div>
-                            <label>Prioridade</label>
-                             <select id="f-geral-prio">
-                                <option value="Baixa">Baixa</option>
-                                <option value="Média">Média</option>
-                                <option value="Alta">Alta</option>
-                            </select>
+                        <div><label>Prioridade</label>
+                             <select id="f-geral-prio"><option value="Baixa">Baixa</option><option value="Média">Média</option><option value="Alta">Alta</option></select>
                         </div>
-                        <div>
-                            <label>Técnico</label>
-                            <input type="text" id="f-geral-tec">
-                        </div>
+                        <div><label>Técnico</label><input type="text" id="f-geral-tec"></div>
                     </div>
                     <label>Última Comunicação</label>
                     <input type="datetime-local" id="f-geral-ultimacom">
@@ -82,35 +76,29 @@
                     <textarea id="f-falhas-acao" rows="3"></textarea>
                 </div>
 
-                <div class="form-section">
+                 <div class="form-section">
                     <h3>Manutenção</h3>
                     <div class="two-col">
                         <div><label>Última Manut.</label><input type="date" id="f-manu-ultima"></div>
                         <div><label>Próxima Manut.</label><input type="date" id="f-manu-proxima"></div>
                     </div>
-                    <label>Custo</label>
-                    <input type="text" id="f-manu-custo">
-                    <label>Peças Utilizadas</label>
-                    <input type="text" id="f-manu-pecas">
+                    <label>Custo</label> <input type="text" id="f-manu-custo">
+                    <label>Peças Utilizadas</label> <input type="text" id="f-manu-pecas">
                 </div>
 
                 <div class="form-section warning-bg">
                     <h3>Pendências</h3>
-                    <small>Preencher estes campos ativará o alerta no card principal.</small>
-                    <label>Pend. Serviço</label>
-                    <input type="text" id="f-pend-servico">
-                    <label>Pend. Material</label>
-                    <input type="text" id="f-pend-material">
+                    <label>Pend. Serviço</label> <input type="text" id="f-pend-servico">
+                    <label>Pend. Material</label> <input type="text" id="f-pend-material">
                 </div>
 
                 <div class="form-section">
                     <h3>Fotos (Máx 3)</h3>
                     <input type="file" id="image-input" accept="image/*" multiple onchange="app.handleImagePreview(event)">
-                    <div id="image-preview-container" class="image-preview-container">
-                        </div>
+                    <div id="image-preview-container" class="image-preview-container"></div>
                 </div>
 
-                 <div class="form-section">
+                <div class="form-section">
                     <h3>Observações</h3>
                     <textarea id="f-obs" rows="4"></textarea>
                 </div>
