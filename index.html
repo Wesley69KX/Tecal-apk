@@ -2,126 +2,72 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Painel de Status das Torres</title>
-
-  <!-- Manifest PWA -->
+  <title>Painel de Status das Torres (Local)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#1677ff">
-
-  <!-- Registrar Service Worker -->
+  <link rel="stylesheet" href="/style.css">
   <script>
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js");
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch(()=>{});
     }
   </script>
-
-  <link rel="stylesheet" href="/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
-
-<body onload="checkLogin()">
-
-<div class="container">
-  <div class="header">
-    <div class="header-title">
-      <img src="https://ssl.gstatic.com/docs/doc_assets/images/drive_48.png" width="45">
-      <h1>🛰️ Painel de Torres – Dashboard</h1>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-title">
+        <img src="icon-192.png" width="45" alt="">
+        <h1>🛰️ Painel de Torres – Local (PWA)</h1>
+      </div>
+      <div class="controls">
+        <label>Status:
+          <select id="filterStatus">
+            <option value="all">Todos</option>
+            <option value="Operando">Operando</option>
+            <option value="Falha">Falha</option>
+            <option value="Offline">Offline</option>
+          </select>
+        </label>
+        <label>Auto-refresh (s):
+          <input id="refreshInterval" type="number" min="5" value="20" style="width:70px">
+        </label>
+        <button class="btn" id="btnRefresh">🔁 Atualizar</button>
+        <button class="btn" id="btnExportCSV">📥 CSV</button>
+        <button class="btn" onclick="exportAllPDF()">📄 Relatório Completo</button>
+      </div>
     </div>
+    <div id="towers-panel"></div>
+  </div>
 
-    <div class="controls">
-      <label>Status:
-        <select id="filterStatus">
-          <option value="all">Todos</option>
-          <option value="Operando">Operando</option>
-          <option value="Falha">Falha</option>
-          <option value="Offline">Offline</option>
-        </select>
-      </label>
-
-      <label>Auto-refresh (s):
-        <input id="refreshInterval" type="number" min="5" value="20" style="width:70px">
-      </label>
-
-      <button class="btn" id="btnRefresh">🔁 Atualizar</button>
-      <button class="btn" id="btnExport">📤 PDF</button>
+  <!-- EDIT MODAL -->
+  <div class="modal" id="editModal">
+    <div class="modal-card">
+      <h3>Editar Torre: <span id="editName"></span></h3>
+      <label>Torre</label><input id="editTorre" disabled>
+      <label>Localização</label><input id="editLocalizacao">
+      <label>Status Operacional</label>
+      <select id="editStatus"><option>Operando</option><option>Falha</option><option>Offline</option></select>
+      <label>Falha Detectada</label><input id="editFalha">
+      <label>Histórico de Falha</label><textarea id="editHistorico"></textarea>
+      <label>Ação Requerida</label><input id="editAcao">
+      <label>Técnico Responsável</label><input id="editTecnico">
+      <label>Data da Última Manutenção</label><input type="date" id="editDataManutencao">
+      <label>Custo (R$)</label><input type="number" step="0.01" id="editCusto">
+      <label>Peças Utilizadas</label><input id="editPecas">
+      <label>Próxima Manutenção</label><input type="date" id="editProxManutencao">
+      <label>Pendência de Serviço</label><textarea id="editPendServico"></textarea>
+      <label>Pendência de Material</label><textarea id="editPendMaterial"></textarea>
+      <label>Observações</label><textarea id="editObs"></textarea>
+      <div class="modal-actions">
+        <button class="btn" id="saveEdit">Salvar</button>
+        <button class="btn-danger" id="cancelEdit">Cancelar</button>
+      </div>
     </div>
   </div>
 
-  <div id="towers-panel"></div>
-</div>
-
-<!-- Modal de edição -->
-<div class="modal" id="editModal">
-  <div class="modal-card">
-    <h3>Editar Torre: <span id="editName"></span></h3>
-
-    <label>Torre</label>
-    <input id="editTorre" disabled>
-
-    <label>Localização</label>
-    <input id="editLocalizacao">
-
-    <label>Status Operacional</label>
-    <select id="editStatus">
-      <option>Operando</option>
-      <option>Falha</option>
-      <option>Offline</option>
-    </select>
-
-    <label>Falha Detectada</label>
-    <input id="editFalha">
-
-    <label>Histórico de Falha</label>
-    <textarea id="editHistorico"></textarea>
-
-    <label>Ação Requerida</label>
-    <input id="editAcao">
-
-    <label>Técnico Responsável</label>
-    <input id="editTecnico">
-
-    <label>Data da Última Manutenção</label>
-    <input type="date" id="editDataManutencao">
-
-    <label>Custo (R$)</label>
-    <input type="number" step="0.01" id="editCusto">
-
-    <label>Peças Utilizadas</label>
-    <input id="editPecas">
-
-    <label>Próxima Manutenção</label>
-    <input type="date" id="editProxManutencao">
-
-    <label>Pendência de Serviço</label>
-    <textarea id="editPendServico"></textarea>
-
-    <label>Pendência de Material</label>
-    <textarea id="editPendMaterial"></textarea>
-
-    <label>Observações</label>
-    <textarea id="editObs"></textarea>
-
-    <div class="modal-actions">
-      <button class="btn" id="saveEdit">Salvar</button>
-      <button class="btn-danger" id="cancelEdit">Cancelar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Tela de login -->
-<div class="modal" id="loginModal">
-  <div class="modal-card">
-    <h3>🔒 Login</h3>
-    <p>Informe a senha para acessar o painel.</p>
-    <input type="password" id="loginPass" placeholder="Senha">
-    <div class="modal-actions">
-      <button class="btn" id="btnLogin">Entrar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Scripts principais -->
-<script src="/offline.js"></script>
-<script src="/script.js"></script>
-
+  <script src="/idb.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>
