@@ -1,27 +1,23 @@
-const CACHE_NAME = 'painel-local-cache-v1';
-const FILES = [
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/idb.js',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
-];
-
-self.addEventListener('install', e => {
+self.addEventListener("install", e => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(FILES))
+    caches.open("torres-cache").then(cache =>
+      cache.addAll([
+        "/",
+        "/index.html",
+        "/style.css",
+        "/script.js",
+        "/offline.html",
+        "/icon-192.png",
+        "/icon-512.png"
+      ])
+    )
   );
-  self.skipWaiting();
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('fetch', e => {
+self.addEventListener("fetch", e => {
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
+    caches.match(e.request).then(resp =>
+      resp || fetch(e.request).catch(() => caches.match("/offline.html"))
+    )
   );
 });
