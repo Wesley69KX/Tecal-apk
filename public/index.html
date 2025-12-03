@@ -1,59 +1,70 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Painel de Status das Torres</title>
-    <link rel="stylesheet" href="style.css" />
-</head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Painel de Torres</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Torres">
+    <link rel="apple-touch-icon" href="icon-192.png">
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
 <body>
 
-    <!-- CABEÇALHO -->
-    <header class="top-bar">
-        <div class="title-box">
-            <img src="icon-192.png" class="logo" />
-            <h1>Painel das Torres</h1>
+    <header>
+        <h1>Painel de Torres <span id="connection-status" class="status-badge online">Online</span></h1>
+        <div class="actions">
+            <button onclick="app.downloadCSV()">CSV</button>
+            <button onclick="app.syncNow()">Sync</button>
         </div>
-        <button id="syncBtn" class="sync-btn">🔄</button>
     </header>
 
-    <!-- LISTA DE TORRES -->
-    <main id="torreList" class="torre-list">
-        <!-- Renderizado via JS -->
-    </main>
-
-    <!-- BOTÃO FLUTUANTE -->
-    <button id="addBtn" class="fab">＋</button>
-
-    <!-- MODAL DE EDIÇÃO -->
-    <div id="modal" class="modal hidden">
-        <div class="modal-content">
-            <h2>Editar Torre</h2>
-
-            <label>Torre</label>
-            <input id="torreNome" type="text">
-
-            <label>Status</label>
-            <select id="torreStatus">
-                <option>Operando</option>
-                <option>Offline</option>
-                <option>Falha</option>
-            </select>
-
-            <label>Última Comunicação</label>
-            <input id="torreUltima" type="datetime-local">
-
-            <label>Falha Detectada</label>
-            <input id="torreFalha" type="text">
-
-            <div class="modal-buttons">
-                <button id="saveBtn" class="btn save">Salvar</button>
-                <button id="cancelBtn" class="btn cancel">Cancelar</button>
+    <div class="container">
+        <input type="text" id="search" placeholder="Filtrar torres..." onkeyup="app.filterList()">
+        
+        <div id="tower-list" class="tower-list">
             </div>
+    </div>
+
+    <button class="fab" onclick="app.openModal()">+</button>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="app.closeModal()">&times;</span>
+            <h2 id="modal-title">Adicionar Torre</h2>
+            <form id="tower-form" onsubmit="app.saveTower(event)">
+                <input type="hidden" id="tower-id">
+                
+                <label>Nome da Torre</label>
+                <input type="text" id="tower-name" required>
+
+                <label>Localização</label>
+                <input type="text" id="tower-location" required>
+
+                <label>Status</label>
+                <select id="tower-status">
+                    <option value="Online">Online</option>
+                    <option value="Offline">Offline</option>
+                    <option value="Manutenção">Manutenção</option>
+                </select>
+
+                <label>Nível Bateria</label>
+                <input type="text" id="tower-battery" placeholder="Ex: 80%">
+
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button>
+                    <button type="submit" class="btn-save">Salvar</button>
+                </div>
+            </form>
         </div>
     </div>
 
+    <script src="idb.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
