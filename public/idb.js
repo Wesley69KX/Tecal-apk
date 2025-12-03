@@ -1,62 +1,71 @@
-/* idb helper */
-const DB_NAME = 'torres-pwa-db';
+// Wrapper simples para IndexedDB
+const DB_NAME = 'painel_torres_db';
 const DB_VERSION = 1;
-let db;
+const STORE_TOWERS = 'towers';
+const STORE_OUTBOX = 'outbox';
 
-function openDB(){
-  return new Promise((resolve,reject)=>{
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = e=>{
-      const idb = e.target.result;
-      if (!idb.objectStoreNames.contains('towers')) {
-        idb.createObjectStore('towers', { keyPath: 'Torre' });
-      }
-      if (!idb.objectStoreNames.contains('outbox')) {
-        idb.createObjectStore('outbox', { keyPath: 'id', autoIncrement: true });
-      }
-    };
-    req.onsuccess = e => { db = e.target.result; resolve(db); };
-    req.onerror = e => reject(e.target.error);
-  });
-}
+const idb = {
+    db: null,
 
-async function idbPut(store, value){
-  await openDB();
-  return new Promise((res,rej)=>{
-    const tx = db.transaction(store,'readwrite');
-    const s = tx.objectStore(store);
-    const r = s.put(value);
-    r.onsuccess = ()=>res(r.result);
-    r.onerror = ()=>rej(r.error);
-  });
-}
-async function idbGet(store, key){
-  await openDB();
-  return new Promise((res,rej)=>{
-    const tx = db.transaction(store,'readonly');
-    const s = tx.objectStore(store);
-    const r = s.get(key);
-    r.onsuccess = ()=>res(r.result);
-    r.onerror = ()=>rej(r.error);
-  });
-}
-async function idbGetAll(store){
-  await openDB();
-  return new Promise((res,rej)=>{
-    const tx = db.transaction(store,'readonly');
-    const s = tx.objectStore(store);
-    const r = s.getAll();
-    r.onsuccess = ()=>res(r.result);
-    r.onerror = ()=>rej(r.error);
-  });
-}
-async function idbDelete(store, key){
-  await openDB();
-  return new Promise((res,rej)=>{
-    const tx = db.transaction(store,'readwrite');
-    const s = tx.objectStore(store);
-    const r = s.delete(key);
-    r.onsuccess = ()=>res();
-    r.onerror = ()=>rej(r.error);
-  });
-}
+    async open() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(STORE_TOWERS)) {
+                    db.createObjectStore(STORE_TOWERS, { keyPath: 'id' });
+                }
+                if (!db.objectStoreNames.contains(STORE_OUTBOX)) {
+                    db.createObjectStore(STORE_OUTBOX, { keyPath: 'id', autoIncrement: true });
+                }
+            };
+
+            request.onsuccess = (e) => {
+                this.db = e.target.result;
+                resolve(this.db);
+            };
+
+            request.onerror = (e) => reject(e);
+        });
+    },
+
+    async getAll(storeName) {
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const request = store.getAll();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    },
+
+    async put(storeName, item) {
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            const request = store.put(item);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    },
+
+    async delete(storeName, key) {
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            const request = store.delete(key);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    },
+    
+    async clear(storeName) {
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            store.clear();
+            tx.oncomplete = () => resolve();
+        });
+    }
+};
