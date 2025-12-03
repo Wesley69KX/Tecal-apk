@@ -1,24 +1,600 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <title>Painel Torres</title>
+  <meta charset="UTF-8">
+  <title>Painel de Status das Torres</title>
+
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#1677ff" />
+  <meta name="theme-color" content="#1677ff">
+
   <script>
     if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("service-worker.js");
-      });
+      navigator.serviceWorker.register("/service-worker.js");
     }
   </script>
-</head>
-<body>
-  <h1>Painel de Status das Torres</h1>
-  <button onclick="carregar()">Carregar Torres</button>
-  <div id="saida"></div>
 
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Painel de Torres – Dashboard Moderno</title>
+
+  <style>
+    /* ------------------------------------
+       TEMA CLARO CORPORATIVO – DASHBOARD
+    --------------------------------------*/
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 1500px;
+      margin: 25px auto;
+      padding: 25px;
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+    }
+
+    /* HEADER */
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-bottom: 2px solid #0066cc;
+      padding-bottom: 15px;
+      margin-bottom: 20px;
+    }
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 2.1rem;
+      color: #0066cc;
+      font-weight: 700;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      background: #e9eef3;
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid #cfd8e3;
+    }
+
+    select, input, button {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid #ccd3db;
+      background: #fff;
+      font-size: 0.95rem;
+      color: #333;
+      cursor: pointer;
+    }
+
+    button.btn {
+      background: #0066cc;
+      color: #fff;
+      font-weight: 600;
+      border: none;
+    }
+    button.btn:hover {
+      background: #004c99;
+    }
+
+    /* PAINEL DE CARDS */
+    #towers-panel {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 22px;
+    }
+
+    @media(max-width: 900px) {
+      #towers-panel { grid-template-columns: 1fr; }
+    }
+
+    /* CARD BASE */
+    .tower-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 22px;
+      box-shadow: 0 5px 12px rgba(0,0,0,0.08);
+      border: 1px solid #d9dfe6;
+      transition: 0.25s;
+    }
+
+    .tower-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.10);
+    }
+
+    /* ALERTA DE PENDÊNCIA */
+    .tower-card.alert-pending {
+      border: 3px solid #ffca28 !important;
+      background: #fff8d1 !important;
+      box-shadow: 0 0 12px rgba(255, 193, 7, 0.45) !important;
+    }
+
+    .pend-banner {
+      font-size: 0.90rem;
+      padding: 8px;
+      margin-bottom: 12px;
+      border-radius: 6px;
+      background: #ffe9a3;
+      border: 1px solid #e6b800;
+      font-weight: 600;
+      color: #664d00;
+    }
+
+    /* CARD HEADER */
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .title-area h2 {
+      margin: 0;
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: #0066cc;
+    }
+
+    .status-pill {
+      padding: 6px 15px;
+      border-radius: 50px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .status-Operando { background: #28a745; }
+    .status-Falha { background: #dc3545; }
+    .status-Offline { background: #ff9800; }
+
+    /* SEÇÕES DO CARD */
+    .section-box {
+      background: #f9fafc;
+      border: 1px solid #d9dfe6;
+      padding: 15px;
+      border-radius: 10px;
+      margin-top: 12px;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #0066cc;
+      margin-bottom: 10px;
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 0.93rem;
+    }
+
+    .row strong {
+      min-width: 155px;
+      color: #333;
+    }
+
+    /* BOTÃO EDITAR */
+    .edit-btn {
+      margin-top: 14px;
+      padding: 10px 16px;
+      background: #0066cc;
+      color: #fff;
+      border-radius: 10px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .edit-btn:hover {
+      background: #004c99;
+    }
+
+    /* MODAL */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    .modal.show { display: flex; }
+
+    .modal-card {
+      width: 600px;
+      max-width: 95%;
+      background: #fff;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.20);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-card h3 {
+      margin-top: 0;
+      color: #0066cc;
+    }
+
+    .modal-card label {
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .modal-card input,
+    .modal-card select,
+    .modal-card textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccd3db;
+      border-radius: 8px;
+      background: #fff;
+      margin-bottom: 12px;
+      font-size: 0.95rem;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn-danger {
+      background: #d9534f;
+      color: #fff;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .btn-danger:hover {
+      background: #b52b27;
+    }
+
+  </style>
+</head>
+
+<body onload="checkLogin()">
+
+<div class="container">
+  <div class="header">
+    <div class="header-title">
+      <img src="https://ssl.gstatic.com/docs/doc_assets/images/drive_48.png" width="45">
+      <h1>🛰️ Painel de Torres – Dashboard</h1>
+    </div>
+
+    <div class="controls">
+      <label>Status:
+        <select id="filterStatus">
+          <option value="all">Todos</option>
+          <option value="Operando">Operando</option>
+          <option value="Falha">Falha</option>
+          <option value="Offline">Offline</option>
+        </select>
+      </label>
+
+      <label>Auto-refresh (s):
+        <input id="refreshInterval" type="number" min="5" value="20" style="width:70px">
+      </label>
+
+      <button class="btn" id="btnRefresh">🔁 Atualizar</button>
+      <button class="btn" id="btnExport">📤 PDF</button>
+    </div>
+  </div>
+
+  <div id="towers-panel"></div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal" id="editModal">
+  <div class="modal-card">
+    <h3>Editar Torre: <span id="editName"></span></h3>
+
+    <label>Torre</label>
+    <input id="editTorre" disabled>
+
+    <label>Localização</label>
+    <input id="editLocalizacao">
+
+    <label>Status Operacional</label>
+    <select id="editStatus">
+      <option>Operando</option>
+      <option>Falha</option>
+      <option>Offline</option>
+    </select>
+
+    <label>Falha Detectada</label>
+    <input id="editFalha">
+
+    <label>Histórico de Falha</label>
+    <textarea id="editHistorico"></textarea>
+
+    <label>Ação Requerida</label>
+    <input id="editAcao">
+
+    <label>Técnico Responsável</label>
+    <input id="editTecnico">
+
+    <label>Data da Última Manutenção</label>
+    <input type="date" id="editDataManutencao">
+
+    <label>Custo (R$)</label>
+    <input type="number" step="0.01" id="editCusto">
+
+    <label>Peças Utilizadas</label>
+    <input id="editPecas">
+
+    <label>Próxima Manutenção</label>
+    <input type="date" id="editProxManutencao">
+
+    <label>Pendência de Serviço</label>
+    <textarea id="editPendServico"></textarea>
+
+    <label>Pendência de Material</label>
+    <textarea id="editPendMaterial"></textarea>
+
+    <label>Observações</label>
+    <textarea id="editObs"></textarea>
+
+    <div class="modal-actions">
+      <button class="btn" id="saveEdit">Salvar</button>
+      <button class="btn-danger" id="cancelEdit">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN MODAL -->
+<div class="modal" id="loginModal">
+  <div class="modal-card">
+    <h3>🔒 Login</h3>
+    <p>Informe a senha para acessar o painel.</p>
+    <input type="password" id="loginPass" placeholder="Senha">
+    <div class="modal-actions">
+      <button class="btn" id="btnLogin">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* --------------------------
+     VARIÁVEIS GLOBAIS
+---------------------------*/
+let towers = [];
+let autoRefreshTimer = null;
+
+/* --------------------------
+     LOGIN
+---------------------------*/
+function checkLogin() {
+  google.script.run
+    .withSuccessHandler(function(isAuth) {
+      if (isAuth === true) {
+        document.getElementById("loginModal").classList.remove("show");
+        loadTowers();
+      } else {
+        document.getElementById("loginModal").classList.add("show");
+      }
+    })
+    .checkPassword(null);
+}
+
+document.getElementById("btnLogin").onclick = function () {
+  const pass = document.getElementById("loginPass").value;
+  google.script.run
+    .withSuccessHandler(function(ok){
+      if(ok === true){
+        document.getElementById("loginModal").classList.remove("show");
+        loadTowers();
+      } else {
+        alert("Senha incorreta.");
+      }
+    })
+    .checkPassword(pass);
+};
+
+/* --------------------------
+     LOAD + RENDER
+---------------------------*/
+function loadTowers() {
+  google.script.run
+    .withSuccessHandler(function(data){
+      towers = data || [];
+      render();
+    })
+    .getTowers();
+}
+
+function render() {
+  const panel = document.getElementById("towers-panel");
+  panel.innerHTML = "";
+
+  const filter = document.getElementById("filterStatus").value;
+
+  towers
+    .filter(t => filter === "all" || t["Status Operacional"] === filter)
+    .forEach(t => panel.appendChild(renderCard(t)));
+}
+
+/* --------------------------
+      CARD
+---------------------------*/
+function renderCard(t) {
+  const pendServ = t["Pendência de Serviço"] ? String(t["Pendência de Serviço"]).trim() : "";
+  const pendMat  = t["Pendência de Material"] ? String(t["Pendência de Material"]).trim() : "";
+
+  const hasPending = (pendServ !== "" || pendMat !== "");
+
+  const card = document.createElement("div");
+  card.className = "tower-card";
+  if (hasPending) card.classList.add("alert-pending");
+
+  // Ícone do status
+  let icon = "🟢";
+  if (t["Status Operacional"] === "Falha") icon = "🔴";
+  if (t["Status Operacional"] === "Offline") icon = "🟠";
+  if (hasPending) icon = "🔔";
+
+  card.innerHTML = `
+    <div class="card-header">
+      <div class="title-area">
+        <h2>${icon} ${t.Torre}</h2>
+      </div>
+      <div class="status-pill status-${t["Status Operacional"]}">
+        ${t["Status Operacional"]}
+      </div>
+    </div>
+
+    ${hasPending ? `<div class="pend-banner">⚠ Pendências encontradas — verifique!</div>` : ""}
+
+    <div class="section-box">
+      <div class="section-title">Informações Gerais</div>
+      <div class="row"><strong>Localização:</strong> ${t.Localização || "—"}</div>
+      <div class="row"><strong>Prioridade:</strong> ${t.Prioridade || "—"}</div>
+      <div class="row"><strong>Técnico:</strong> ${t["Técnico Responsável"] || "—"}</div>
+      <div class="row"><strong>Última Comunicação:</strong> ${t["Última Comunicação"] || "—"}</div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-title">Falhas e Ações</div>
+      <div class="row"><strong>Falha Detectada:</strong> ${t["Falha Detectada"] || "—"}</div>
+      <div class="row"><strong>Histórico de Falha:</strong> ${t["Histórico de Falha"] || "—"}</div>
+      <div class="row"><strong>Ação Requerida:</strong> ${t["Ação Requerida"] || "—"}</div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-title">Manutenção</div>
+      <div class="row"><strong>Última Manutenção:</strong> ${t["Data da Última Manutenção"] || "—"}</div>
+      <div class="row"><strong>Custo:</strong> ${t["Custo da Última Manutenção (R$)"] || "—"}</div>
+      <div class="row"><strong>Peças Utilizadas:</strong> ${t["Peças Utilizadas"] || "—"}</div>
+      <div class="row"><strong>Próxima Manutenção:</strong> ${t["Próxima Manutenção"] || "—"}</div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-title">Pendências</div>
+      <div class="row"><strong>Pend. Serviço:</strong> ${pendServ || "—"}</div>
+      <div class="row"><strong>Pend. Material:</strong> ${pendMat || "—"}</div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-title">Observações</div>
+      <div class="row"><strong>Obs:</strong> ${t["Observações"] || "—"}</div>
+    </div>
+
+    <button class="edit-btn" onclick="openEdit('${t.Torre}')">✏️ Editar</button>
+  `;
+
+  return card;
+}
+
+/* --------------------------
+     OPEN EDIT MODAL
+---------------------------*/
+function openEdit(torre) {
+  const t = towers.find(x => x.Torre === torre);
+  if (!t) return alert("Erro ao localizar torre.");
+
+  document.getElementById("editName").innerText = torre;
+  document.getElementById("editTorre").value = t.Torre;
+  document.getElementById("editLocalizacao").value = t.Localização || "";
+  document.getElementById("editStatus").value = t["Status Operacional"] || "";
+  document.getElementById("editFalha").value = t["Falha Detectada"] || "";
+  document.getElementById("editHistorico").value = t["Histórico de Falha"] || "";
+  document.getElementById("editAcao").value = t["Ação Requerida"] || "";
+  document.getElementById("editTecnico").value = t["Técnico Responsável"] || "";
+  document.getElementById("editDataManutencao").value = t["Data da Última Manutenção"] || "";
+  document.getElementById("editCusto").value = t["Custo da Última Manutenção (R$)"] || "";
+  document.getElementById("editPecas").value = t["Peças Utilizadas"] || "";
+  document.getElementById("editProxManutencao").value = t["Próxima Manutenção"] || "";
+  document.getElementById("editPendServico").value = t["Pendência de Serviço"] || "";
+  document.getElementById("editPendMaterial").value = t["Pendência de Material"] || "";
+  document.getElementById("editObs").value = t["Observações"] || "";
+
+  document.getElementById("editModal").classList.add("show");
+}
+
+document.getElementById("cancelEdit").onclick = () => {
+  document.getElementById("editModal").classList.remove("show");
+};
+
+/* --------------------------
+     SAVE EDIT
+---------------------------*/
+document.getElementById("saveEdit").onclick = function () {
+  const updates = {
+    "Localização": document.getElementById("editLocalizacao").value,
+    "Status Operacional": document.getElementById("editStatus").value,
+    "Falha Detectada": document.getElementById("editFalha").value,
+    "Histórico de Falha": document.getElementById("editHistorico").value,
+    "Ação Requerida": document.getElementById("editAcao").value,
+    "Técnico Responsável": document.getElementById("editTecnico").value,
+    "Data da Última Manutenção": document.getElementById("editDataManutencao").value,
+    "Custo da Última Manutenção (R$)": document.getElementById("editCusto").value,
+    "Peças Utilizadas": document.getElementById("editPecas").value,
+    "Próxima Manutenção": document.getElementById("editProxManutencao").value,
+    "Pendência de Serviço": document.getElementById("editPendServico").value,
+    "Pendência de Material": document.getElementById("editPendMaterial").value,
+    "Observações": document.getElementById("editObs").value,
+    "Última Comunicação": new Date().toISOString()
+  };
+
+  google.script.run
+    .withSuccessHandler(function(){
+      document.getElementById("editModal").classList.remove("show");
+      loadTowers();
+    })
+    .updateTower({ Torre: document.getElementById("editTorre").value, updates });
+};
+
+/* --------------------------
+     EVENTOS
+---------------------------*/
+document.getElementById("btnRefresh").onclick = loadTowers;
+
+document.getElementById("filterStatus").onchange = render;
+
+document.getElementById("refreshInterval").onchange = function() {
+  clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(loadTowers, this.value * 1000);
+};
+
+document.getElementById("btnExport").onclick = function () {
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res && res.url) window.open(res.url, "_blank");
+    })
+    .exportPdf();
+};
+
+</script>
+<script src="offline.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
