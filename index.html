@@ -1,0 +1,24 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Painel Torres</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1677ff" />
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("service-worker.js");
+      });
+    }
+  </script>
+</head>
+<body>
+  <h1>Painel de Status das Torres</h1>
+  <button onclick="carregar()">Carregar Torres</button>
+  <div id="saida"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
