@@ -1,1 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Painel de Torres</title>
 
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- PWA iPhone support -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Service Worker -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/service-worker.js");
+    }
+  </script>
+
+  <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+
+<header class="top-bar">
+  <h2>🛰️ Painel de Status das Torres</h2>
+  <button onclick="syncNow()" class="btn">🔄 Sincronizar</button>
+</header>
+
+<div id="list"></div>
+
+<button class="add-btn" onclick="openAdd()">+ Adicionar Torre</button>
+
+<!-- Modal -->
+<div id="modal" class="modal hidden">
+  <div class="modal-card">
+    <h3 id="modalTitle">Editar Torre</h3>
+
+    <label>Torre</label>
+    <input id="mTorre">
+
+    <label>Status</label>
+    <select id="mStatus">
+      <option>Operando</option>
+      <option>Falha</option>
+      <option>Offline</option>
+    </select>
+
+    <label>Última Comunicação</label>
+    <input type="date" id="mCom">
+
+    <label>Falha Detectada</label>
+    <input id="mFalha">
+
+    <button class="btn" onclick="save()">Salvar</button>
+    <button class="btn-danger" onclick="closeModal()">Cancelar</button>
+  </div>
+</div>
+
+<script src="/script.js"></script>
+</body>
+</html>
