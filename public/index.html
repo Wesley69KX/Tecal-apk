@@ -3,62 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Painel de Torres</title>
+    <title>Gestão de Torres</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
-    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Torres">
     <link rel="apple-touch-icon" href="icon-192.png">
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
     <header>
-        <h1>Painel de Torres <span id="connection-status" class="status-badge online">Online</span></h1>
+        <h1>Gestão de Torres <span id="connection-status" class="status-badge online">Online</span></h1>
         <div class="actions">
-            <button onclick="app.downloadCSV()">CSV</button>
             <button onclick="app.syncNow()">Sync</button>
         </div>
     </header>
 
     <div class="container">
-        <input type="text" id="search" placeholder="Filtrar torres..." onkeyup="app.filterList()">
+        <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre..." onkeyup="app.filterList()">
         
         <div id="tower-list" class="tower-list">
             </div>
     </div>
 
-    <button class="fab" onclick="app.openModal()">+</button>
-
     <div id="modal" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="app.closeModal()">&times;</span>
-            <h2 id="modal-title">Adicionar Torre</h2>
+             <div class="modal-header">
+                <h2 id="modal-title">Editar Torre</h2>
+                <span class="close" onclick="app.closeModal()">&times;</span>
+            </div>
+            
             <form id="tower-form" onsubmit="app.saveTower(event)">
                 <input type="hidden" id="tower-id">
                 
-                <label>Nome da Torre</label>
-                <input type="text" id="tower-name" required>
+                <div class="form-section">
+                    <h3>Principal</h3>
+                    <label>Nome da Torre</label>
+                    <input type="text" id="f-nome" required readonly class="readonly-input">
+                    <label>Status Operacional</label>
+                    <select id="f-status">
+                        <option value="Operando">Operando</option>
+                        <option value="Falha">Falha</option>
+                        <option value="Manutenção">Manutenção</option>
+                    </select>
+                </div>
 
-                <label>Localização</label>
-                <input type="text" id="tower-location" required>
+                <div class="form-section">
+                    <h3>Informações Gerais</h3>
+                    <label>Localização (CDS)</label>
+                    <input type="text" id="f-geral-local">
+                    
+                    <div class="two-col">
+                        <div>
+                            <label>Prioridade</label>
+                             <select id="f-geral-prio">
+                                <option value="Baixa">Baixa</option>
+                                <option value="Média">Média</option>
+                                <option value="Alta">Alta</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Técnico</label>
+                            <input type="text" id="f-geral-tec">
+                        </div>
+                    </div>
+                    <label>Última Comunicação</label>
+                    <input type="datetime-local" id="f-geral-ultimacom">
+                </div>
 
-                <label>Status</label>
-                <select id="tower-status">
-                    <option value="Online">Online</option>
-                    <option value="Offline">Offline</option>
-                    <option value="Manutenção">Manutenção</option>
-                </select>
+                <div class="form-section">
+                    <h3>Falhas e Ações</h3>
+                    <label>Falha Detectada</label>
+                    <input type="text" id="f-falhas-detectada">
+                    <label>Histórico de Falha</label>
+                    <textarea id="f-falhas-historico" rows="2"></textarea>
+                    <label>Ação Requerida</label>
+                    <textarea id="f-falhas-acao" rows="3"></textarea>
+                </div>
 
-                <label>Nível Bateria</label>
-                <input type="text" id="tower-battery" placeholder="Ex: 80%">
+                <div class="form-section">
+                    <h3>Manutenção</h3>
+                    <div class="two-col">
+                        <div><label>Última Manut.</label><input type="date" id="f-manu-ultima"></div>
+                        <div><label>Próxima Manut.</label><input type="date" id="f-manu-proxima"></div>
+                    </div>
+                    <label>Custo</label>
+                    <input type="text" id="f-manu-custo">
+                    <label>Peças Utilizadas</label>
+                    <input type="text" id="f-manu-pecas">
+                </div>
 
-                <div class="modal-actions">
+                <div class="form-section warning-bg">
+                    <h3>Pendências</h3>
+                    <small>Preencher estes campos ativará o alerta no card principal.</small>
+                    <label>Pend. Serviço</label>
+                    <input type="text" id="f-pend-servico">
+                    <label>Pend. Material</label>
+                    <input type="text" id="f-pend-material">
+                </div>
+
+                <div class="form-section">
+                    <h3>Fotos (Máx 3)</h3>
+                    <input type="file" id="image-input" accept="image/*" multiple onchange="app.handleImagePreview(event)">
+                    <div id="image-preview-container" class="image-preview-container">
+                        </div>
+                </div>
+
+                 <div class="form-section">
+                    <h3>Observações</h3>
+                    <textarea id="f-obs" rows="4"></textarea>
+                </div>
+
+                <div class="modal-actions sticky-footer">
                     <button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button>
-                    <button type="submit" class="btn-save">Salvar</button>
+                    <button type="submit" class="btn-save">Salvar Dados</button>
                 </div>
             </form>
         </div>
