@@ -1,308 +1,225 @@
-/* app.js - main pwa logic */
-(async()=>{
-  // constants
-  const API_PUSH = '/api/towers'; // server endpoint (Vercel function)
-  const DEFAULT_TOWERS = [
-    "ER 01","ER 02","ER 03","ER 04","ER 05","ER 06","ER 07","ER 08","ER 09",
-    "ER 10","ER 11","ER 12","ER 13","ER 14","ER 15","ER 16","ER 17","ER 18",
-    "ER 19","ER 20","ER 21","ER 22","ER 23"
-  ];
+const DEFAULT_TOWERS = [
+    { id: 1, nome: "Torre Padrão A", status: "Online", bateria: "100%", local: "Centro" },
+    { id: 2, nome: "Torre Padrão B", status: "Offline", bateria: "0%", local: "Zona Rural" }
+];
 
-  // DOM refs
-  const panel = document.getElementById('towers-panel');
-  const filterStatus = document.getElementById('filterStatus');
-  const searchInput = document.getElementById('searchInput');
-  const btnRefresh = document.getElementById('btnRefresh');
-  const btnSync = document.getElementById('btnSync');
-  const addBtn = document.getElementById('addBtn');
-  const offlineBanner = document.getElementById('offlineBanner');
+const app = {
+    towers: [],
 
-  // modal elements
-  const editModal = document.getElementById('editModal');
-  const editTorre = document.getElementById('editTorre');
-  const editLocalizacao = document.getElementById('editLocalizacao');
-  const editStatus = document.getElementById('editStatus');
-  const editFalha = document.getElementById('editFalha');
-  const editAcao = document.getElementById('editAcao');
-  const editTecnico = document.getElementById('editTecnico');
-  const editDataManutencao = document.getElementById('editDataManutencao');
-  const editCusto = document.getElementById('editCusto');
-  const editPecas = document.getElementById('editPecas');
-  const editProxManutencao = document.getElementById('editProxManutencao');
-  const editPendServico = document.getElementById('editPendServico');
-  const editPendMaterial = document.getElementById('editPendMaterial');
-  const editObs = document.getElementById('editObs');
-  const saveEdit = document.getElementById('saveEdit');
-  const cancelEdit = document.getElementById('cancelEdit');
-  const reportBtn = document.getElementById('reportBtn');
-
-  let towers = [];
-  let currentEdit = null;
-
-  // initialize DB + default data
-  await openDB();
-  let all = await idbGetAll('towers');
-  if (!all || all.length === 0) {
-    const now = new Date().toISOString();
-    for (const t of DEFAULT_TOWERS) {
-      await idbPut('towers', {
-        Torre: t,
-        Localização: 'COS',
-        "Status Operacional": 'Operando',
-        "Última Comunicação": now,
-        "Falha Detectada": 'Nenhuma',
-        "Ação Requerida": 'Nenhuma',
-        "Prioridade": 'Média',
-        "Técnico Responsável": 'A designar',
-        "Data da Última Manutenção": '',
-        "Custo da Última Manutenção (R$)": '',
-        "Peças Utilizadas": '',
-        "Próxima Manutenção": '',
-        "Observações": '',
-        "Pendência de Serviço": '',
-        "Pendência de Material": '',
-        "Link para Relatório": ''
-      });
-    }
-    all = await idbGetAll('towers');
-  }
-  towers = all;
-  render();
-
-  // events
-  filterStatus.addEventListener('change', render);
-  searchInput?.addEventListener('input', render);
-  btnRefresh.addEventListener('click', async ()=>{ towers = await idbGetAll('towers'); render(); });
-  addBtn.addEventListener('click', ()=> openCreate());
-  btnSync.addEventListener('click', syncNow);
-  window.addEventListener('online', ()=>{ offlineBanner.classList.add('hidden'); syncNow(); });
-  window.addEventListener('offline', ()=>{ offlineBanner.classList.remove('hidden'); });
-
-  cancelEdit.addEventListener('click', ()=>closeModal());
-  saveEdit.addEventListener('click', async ()=>{
-    await saveEditHandler();
-  });
-  reportBtn.addEventListener('click', ()=> {
-    if (currentEdit) downloadReport(currentEdit);
-  });
-
-  // render
-  function render() {
-    panel.innerHTML = '';
-    const q = searchInput?.value?.toLowerCase?.() || '';
-    const filter = filterStatus.value || 'all';
-
-    towers = towers.sort((a,b)=> (a.Torre||'').localeCompare(b.Torre||''));
-    towers.filter(t=>{
-      if (filter !== 'all' && t['Status Operacional'] !== filter) return false;
-      if (q && !(t.Torre||'').toLowerCase().includes(q) && !(t.Localização||'').toLowerCase().includes(q)) return false;
-      return true;
-    }).forEach(t=>{
-      panel.appendChild(cardFor(t));
-    });
-  }
-
-  function cardFor(t){
-    const pendServ = t['Pendência de Serviço'] || '';
-    const pendMat = t['Pendência de Material'] || '';
-    const hasPending = (pendServ.trim() !== '' || pendMat.trim() !== '');
-    const card = document.createElement('div');
-    card.className = 'tower-card';
-    card.innerHTML = `
-      <div class="card-header">
-        <h3> ${t.Torre} </h3>
-        <div class="status-pill status-${t['Status Operacional']}">${t['Status Operacional']}</div>
-      </div>
-      ${hasPending?`<div class="pend-banner">⚠ Pendências encontradas — verifique!</div>`:''}
-      <div class="section">
-        <div class="row"><strong>Localização</strong><span>${t.Localização||'—'}</span></div>
-        <div class="row"><strong>Última Comunicação</strong><span>${t['Última Comunicação']? formatDate(t['Última Comunicação']) : '—'}</span></div>
-        <div class="row"><strong>Técnico</strong><span>${t['Técnico Responsável']||'—'}</span></div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn" data-action="edit">✏️ Editar</button>
-        <button class="btn" data-action="report">📄 Relatório</button>
-      </div>
-    `;
-    card.querySelector('[data-action="edit"]').addEventListener('click', ()=> openEdit(t.Torre));
-    card.querySelector('[data-action="report"]').addEventListener('click', ()=> downloadReport(t.Torre));
-    return card;
-  }
-
-  // open edit modal by torre
-  function openEdit(torre){
-    const t = towers.find(x=>x.Torre===torre);
-    if(!t) return alert('Torre não encontrada');
-    currentEdit = torre;
-    editTorre.value = t.Torre || '';
-    editLocalizacao.value = t.Localização || '';
-    editStatus.value = t['Status Operacional'] || 'Operando';
-    editFalha.value = t['Falha Detectada'] || '';
-    editAcao.value = t['Ação Requerida'] || '';
-    editTecnico.value = t['Técnico Responsável'] || '';
-    editDataManutencao.value = t['Data da Última Manutenção'] || '';
-    editCusto.value = t['Custo da Última Manutenção (R$)'] || '';
-    editPecas.value = t['Peças Utilizadas'] || '';
-    editProxManutencao.value = t['Próxima Manutenção'] || '';
-    editPendServico.value = t['Pendência de Serviço'] || '';
-    editPendMaterial.value = t['Pendência de Material'] || '';
-    editObs.value = t['Observações'] || '';
-    editModal.classList.add('show');
-  }
-
-  function openCreate(){
-    // create new tower name dialog (simple)
-    const name = prompt('Nome da nova torre (ex: ER 24)');
-    if(!name) return;
-    const now = new Date().toISOString();
-    const obj = {
-      Torre: name,
-      Localização: 'COS',
-      "Status Operacional": 'Operando',
-      "Última Comunicação": now,
-      "Falha Detectada": '',
-      "Ação Requerida": '',
-      "Prioridade": 'Média',
-      "Técnico Responsável": '',
-      "Data da Última Manutenção": '',
-      "Custo da Última Manutenção (R$)": '',
-      "Peças Utilizadas": '',
-      "Próxima Manutenção": '',
-      "Observações": '',
-      "Pendência de Serviço": '',
-      "Pendência de Material": ''
-    };
-    idbPut('towers', obj).then(async ()=>{
-      towers = await idbGetAll('towers');
-      render();
-      queueOutbox({ type: 'create', data: obj });
-    });
-  }
-
-  async function saveEditHandler(){
-    if(!currentEdit) return;
-    // read data
-    const t = await idbGet('towers', currentEdit);
-    if(!t) return;
-    t.Localização = editLocalizacao.value;
-    t['Status Operacional'] = editStatus.value;
-    t['Falha Detectada'] = editFalha.value;
-    t['Ação Requerida'] = editAcao.value;
-    t['Técnico Responsável'] = editTecnico.value;
-    t['Data da Última Manutenção'] = editDataManutencao.value;
-    t['Custo da Última Manutenção (R$)'] = editCusto.value;
-    t['Peças Utilizadas'] = editPecas.value;
-    t['Próxima Manutenção'] = editProxManutencao.value;
-    t['Pendência de Serviço'] = editPendServico.value;
-    t['Pendência de Material'] = editPendMaterial.value;
-    t['Observações'] = editObs.value;
-    t['Última Comunicação'] = new Date().toISOString();
-
-    await idbPut('towers', t);
-    towers = await idbGetAll('towers');
-    render();
-    closeModal();
-
-    // push to outbox for sync
-    await queueOutbox({ type: 'update', Torre: t.Torre, updates: t });
-  }
-
-  function closeModal(){
-    editModal.classList.remove('show');
-    currentEdit = null;
-  }
-
-  // outbox queue
-  async function queueOutbox(item){
-    await idbPut('outbox', { ...item, time: Date.now() });
-    // try sync immediately
-    if(navigator.onLine) await processOutbox();
-  }
-
-  async function processOutbox(){
-    const items = await idbGetAll('outbox');
-    for(const it of items){
-      try{
-        await fetch(API_PUSH, {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify(it)
-        });
-        // delete after success
-        await idbDelete('outbox', it.id);
-      }catch(e){
-        console.warn('outbox sync failed', e);
-      }
-    }
-  }
-
-  // sync full dataset with server (pull + push)
-  async function syncNow(){
-    try{
-      // push local outbox first
-      await processOutbox();
-
-      // pull from server
-      const r = await fetch(API_PUSH);
-      if(r.ok){
-        const remote = await r.json();
-        // remote expected array of towers
-        if(Array.isArray(remote)){
-          // merge remote into local (overwrite)
-          for(const t of remote){
-            await idbPut('towers', t);
-          }
-          towers = await idbGetAll('towers');
-          render();
-          alert('Sincronização concluída');
-        } else if(remote.ok){
-          // legacy response
-          alert('Sincronização concluída');
+    async init() {
+        await idb.open();
+        
+        // 1. Carrega dados locais
+        this.towers = await idb.getAll('towers');
+        
+        // Se vazio, popula com default
+        if (this.towers.length === 0) {
+            console.log("DB vazio, carregando defaults...");
+            for (const t of DEFAULT_TOWERS) {
+                await idb.put('towers', t);
+            }
+            this.towers = await idb.getAll('towers');
         }
-      }
-    }catch(e){
-      console.warn('sync failed', e);
-      alert('Não foi possível sincronizar — usando dados locais');
+
+        this.renderList();
+        this.updateOnlineStatus();
+
+        // Listeners de rede
+        window.addEventListener('online', () => this.updateOnlineStatus());
+        window.addEventListener('offline', () => this.updateOnlineStatus());
+        
+        // Registra Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./service-worker.js')
+                .then(() => console.log('SW registrado'))
+                .catch(err => console.error('Erro SW:', err));
+        }
+
+        // Tenta sincronizar se online na abertura
+        if (navigator.onLine) {
+            this.syncNow();
+        }
+    },
+
+    renderList(list = this.towers) {
+        const container = document.getElementById('tower-list');
+        container.innerHTML = '';
+        list.forEach(t => {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.innerHTML = `
+                <div class="card-header">
+                    <span>${t.nome}</span>
+                    <span class="status-dot st-${t.status}"></span>
+                </div>
+                <div class="card-details">
+                    <p>📍 ${t.local}</p>
+                    <p>🔋 ${t.bateria}</p>
+                    <p>📡 Status: ${t.status}</p>
+                </div>
+                <div class="card-actions">
+                    <button class="btn-edit" onclick="app.editTower(${t.id})">Editar</button>
+                    <button class="btn-pdf" onclick="app.generatePDF(${t.id})">PDF</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    },
+
+    filterList() {
+        const term = document.getElementById('search').value.toLowerCase();
+        const filtered = this.towers.filter(t => 
+            t.nome.toLowerCase().includes(term) || 
+            t.local.toLowerCase().includes(term)
+        );
+        this.renderList(filtered);
+    },
+
+    openModal() {
+        document.getElementById('tower-form').reset();
+        document.getElementById('tower-id').value = Date.now(); // Novo ID temp
+        document.getElementById('modal-title').innerText = "Nova Torre";
+        document.getElementById('modal').style.display = 'flex';
+    },
+
+    closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    },
+
+    editTower(id) {
+        const t = this.towers.find(x => x.id == id);
+        if (!t) return;
+        document.getElementById('tower-id').value = t.id;
+        document.getElementById('tower-name').value = t.nome;
+        document.getElementById('tower-location').value = t.local;
+        document.getElementById('tower-status').value = t.status;
+        document.getElementById('tower-battery').value = t.bateria;
+        document.getElementById('modal-title').innerText = "Editar Torre";
+        document.getElementById('modal').style.display = 'flex';
+    },
+
+    async saveTower(e) {
+        e.preventDefault();
+        const id = parseInt(document.getElementById('tower-id').value);
+        
+        const tower = {
+            id: id,
+            nome: document.getElementById('tower-name').value,
+            local: document.getElementById('tower-location').value,
+            status: document.getElementById('tower-status').value,
+            bateria: document.getElementById('tower-battery').value,
+            updatedAt: new Date().toISOString()
+        };
+
+        // Salva local (IndexedDB)
+        await idb.put('towers', tower);
+        
+        // Adiciona à Outbox para sync
+        await idb.put('outbox', tower);
+
+        // Atualiza UI
+        this.towers = await idb.getAll('towers');
+        this.renderList();
+        this.closeModal();
+
+        // Tenta sync se online
+        if (navigator.onLine) {
+            this.processOutbox();
+        }
+    },
+
+    async updateOnlineStatus() {
+        const el = document.getElementById('connection-status');
+        if (navigator.onLine) {
+            el.innerText = "Online";
+            el.className = "status-badge online";
+            this.processOutbox();
+        } else {
+            el.innerText = "Offline";
+            el.className = "status-badge offline";
+        }
+    },
+
+    async processOutbox() {
+        const outboxItems = await idb.getAll('outbox');
+        if (outboxItems.length === 0) return;
+
+        console.log(`Syncing ${outboxItems.length} items...`);
+        try {
+            const res = await fetch('/api/towers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(outboxItems)
+            });
+
+            if (res.ok) {
+                // Limpa outbox após sucesso
+                await idb.clear('outbox');
+                console.log('Sync concluído');
+            }
+        } catch (err) {
+            console.error('Falha no sync:', err);
+        }
+    },
+
+    async syncNow() {
+        if (!navigator.onLine) {
+            alert("Você está offline. As alterações serão salvas localmente.");
+            return;
+        }
+
+        // 1. Envia pendências
+        await this.processOutbox();
+
+        // 2. Busca dados do servidor (estratégia simples: servidor ganha)
+        try {
+            const res = await fetch('/api/towers');
+            const remoteData = await res.json();
+            
+            if (Array.isArray(remoteData)) {
+                for (const item of remoteData) {
+                    await idb.put('towers', item);
+                }
+                this.towers = await idb.getAll('towers');
+                this.renderList();
+                alert("Sincronizado com sucesso!");
+            }
+        } catch (e) {
+            console.error("Erro ao buscar dados remotos", e);
+        }
+    },
+
+    generatePDF(id) {
+        const t = this.towers.find(x => x.id == id);
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.text(`Relatório da Torre: ${t.nome}`, 10, 10);
+        doc.text(`ID: ${t.id}`, 10, 20);
+        doc.text(`Local: ${t.local}`, 10, 30);
+        doc.text(`Status: ${t.status}`, 10, 40);
+        doc.text(`Bateria: ${t.bateria}`, 10, 50);
+        doc.text(`Data: ${new Date().toLocaleString()}`, 10, 60);
+
+        doc.save(`torre_${t.id}.pdf`);
+    },
+
+    downloadCSV() {
+        const header = ["ID", "Nome", "Local", "Status", "Bateria"];
+        const rows = this.towers.map(t => [t.id, t.nome, t.local, t.status, t.bateria]);
+        
+        let csvContent = "data:text/csv;charset=utf-8," 
+            + header.join(",") + "\n" 
+            + rows.map(e => e.join(",")).join("\n");
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "relatorio_torres.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
-  }
+};
 
-  // export per-tower PDF
-  function downloadReport(torre){
-    const t = towers.find(x=>x.Torre === torre);
-    if(!t) return alert('Torre não encontrada');
-    const { jsPDF } = window.jspdf || window.jspdf || {};
-    if(!jsPDF){
-      // fallback: create simple text file
-      const txt = Object.keys(t).map(k=>k+': '+(t[k]||'')).join('\\n');
-      const blob = new Blob([txt], {type:'text/plain'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `Relatorio_${torre.replace(/\\s+/g,'_')}.txt`;
-      a.click();
-      return;
-    }
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text('Relatório - ' + t.Torre, 14, 20);
-    doc.setFontSize(11);
-    let y = 30;
-    for(const key of ['Localização','Status Operacional','Última Comunicação','Falha Detectada','Ação Requerida','Prioridade','Técnico Responsável','Data da Última Manutenção','Custo da Última Manutenção (R$)','Peças Utilizadas','Próxima Manutenção','Pendência de Serviço','Pendência de Material','Observações']){
-      doc.text(`${key}: ${t[key] || ''}`, 14, y);
-      y += 7;
-      if(y > 280){ doc.addPage(); y = 20; }
-    }
-    doc.save(`Relatorio_${torre.replace(/\\s+/g,'_')}.pdf`);
-  }
-
-  // helpers
-  function formatDate(s){
-    try{
-      const d = new Date(s);
-      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
-    }catch(e){ return s; }
-  }
-
-  // try background sync when becomes online
-  if(navigator.onLine) processOutbox();
-
-})();
+window.onload = () => app.init();
