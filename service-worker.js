@@ -1,24 +1,26 @@
-const CACHE_NAME = "painel-cache-v1";
+const CACHE = "painel-torres-v1";
 
-const FILES_TO_CACHE = [
-  "/",
-  "/index.html",
-  "/style.css",
-  "/script.js",
-  "/offline.js",
-  "/manifest.json",
-  "/icon-192.png",
-  "/icon-512.png"
-];
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(FILES_TO_CACHE))
+self.addEventListener("install", e => {
+  e.waitUntil(
+    caches.open(CACHE).then(cache => {
+      return cache.addAll([
+        "/",
+        "/index.html",
+        "/style.css",
+        "/script.js",
+        "/offline.js",
+        "/offline.html",
+        "/icon-192.png",
+        "/icon-512.png"
+      ]);
+    })
   );
 });
 
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then(resp => resp || fetch(event.request))
+self.addEventListener("fetch", e => {
+  e.respondWith(
+    caches.match(e.request).then(resp => {
+      return resp || fetch(e.request).catch(() => caches.match("/offline.html"));
+    })
   );
 });
