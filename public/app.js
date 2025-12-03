@@ -1,14 +1,13 @@
 const app = {
     towers: [],
-    tempPhotos: [], // Armazena fotos em base64 durante a edição no modal
+    tempPhotos: [],
 
     async init() {
         await idb.open();
         this.towers = await idb.getAll('towers');
         
-        // Se DB vazio, gera as 25 torres iniciais
+        // Se vazio, cria as 25 torres
         if (this.towers.length === 0) {
-            console.log("Populando DB inicial (01-25)...");
             await this.seedDatabase();
             this.towers = await idb.getAll('towers');
         }
@@ -20,25 +19,21 @@ const app = {
         window.addEventListener('offline', () => this.updateOnlineStatus());
         
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./service-worker.js').catch(err => console.error('Erro SW:', err));
+            navigator.serviceWorker.register('./service-worker.js').catch(console.error);
         }
-
         if (navigator.onLine) this.syncNow();
     },
 
-    // --- GERAÇÃO DE DADOS INICIAIS ---
     async seedDatabase() {
-        const nowStr = new Date().toISOString().slice(0, 16); // Formato para datetime-local
-        const todayStr = new Date().toISOString().split('T')[0]; // Formato para date
+        const nowStr = new Date().toISOString().slice(0, 16);
+        const todayStr = new Date().toISOString().split('T')[0];
 
         for (let i = 1; i <= 25; i++) {
             const idStr = i.toString().padStart(2, '0');
-            // Estrutura de dados baseada na imagem ER 08
             const tower = {
                 id: i,
                 nome: `ER ${idStr}`,
-                status: i % 5 === 0 ? "Falha" : "Operando", // Algumas em falha para exemplo
-                // Dados aninhados conforme a imagem
+                status: i % 8 === 0 ? "Falha" : "Operando",
                 geral: {
                     localizacao: `CDS - Setor ${String.fromCharCode(65 + (i%5))}`,
                     prioridade: "Média",
@@ -48,174 +43,318 @@ const app = {
                 falhas: { detectada: "", historico: "", acao: "" },
                 manutencao: { ultima: todayStr, custo: "", pecas: "", proxima: "" },
                 pendencias: {
-                    servico: i === 8 ? "Verificar cabeamento" : "", // Exemplo para ER 08
-                    material: i === 8 ? "PCI de impedância" : ""
+                    servico: i === 8 ? "Verificar cabeamento coaxial" : "",
+                    material: i === 8 ? "Conector N-Macho" : ""
                 },
-                observacoes: i === 8 ? "Placa PCI apresentou defeito, levar para análise." : "",
-                fotos: [], // Array de strings Base64
+                observacoes: "",
+                fotos: [],
                 updatedAt: new Date().toISOString()
             };
             await idb.put('towers', tower);
         }
     },
 
-    // --- RENDERIZAÇÃO DA LISTA ---
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
-        
-        list.sort((a, b) => a.id - b.id); // Ordena por ID
+        list.sort((a, b) => a.id - b.id);
 
         list.forEach(t => {
-            // Verifica se há pendências para mostrar o alerta
-            const temPendencias = t.pendencias.servico || t.pendencias.material;
-
             const div = document.createElement('div');
-            div.className = 'card';
-            // Template string literal robusto para o card
+            // Adiciona classe de status para a borda colorida
+            div.className = `card st-${t.status.replace(' ','')}`;
+            
+            // Verifica pendências para destacar texto
+            const hasPendencia = t.pendencias.servico || t.pendencias.material;
+            const pendenciaStyle = hasPendencia ? 'text-danger' : '';
+
+            // Função helper para formatar data
+            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
+            const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
+
             div.innerHTML = `
                 <div class="card-header">
-                    <span>🔔 ${t.nome}</span>
-                    <span class="status-pill st-${t.status}">${t.status}</span>
+                    <strong>🔔 ${t.nome}</strong>
+                    <div class="st-${t.status}">
+                        <span class="status-pill">${t.status}</span>
+                    </div>
                 </div>
                 
-                ${temPendencias ? `<div class="warning-alert">⚠️ Pendências encontradas — verifique!</div>` : ''}
-                
                 <div class="card-body">
-                    <div class="info-row"><span class="info-label">Localização:</span><span>${t.geral.localizacao}</span></div>
-                    <div class="info-row"><span class="info-label">Técnico:</span><span>${t.geral.tecnico}</span></div>
-                    <div class="info-row"><span class="info-label">Última Com.:</span><span style="font-size:0.8rem">${new Date(t.geral.ultimaCom).toLocaleString()}</span></div>
-                    ${t.pendencias.material ? `<div class="info-row" style="color:var(--danger)"><span class="info-label">Pend. Material:</span><span>${t.pendencias.material}</span></div>` : ''}
+                    <div class="data-group">
+                        <div class="group-title">Informações Gerais</div>
+                        <div class="kv-row">
+                            <span class="kv-item"><span class="kv-label">Local:</span>${t.geral.localizacao}</span>
+                            <span class="kv-item"><span class="kv-label">Tec:</span>${t.geral.tecnico}</span>
+                            <span class="kv-item"><span class="kv-label">Prioridade:</span>${t.geral.prioridade}</span>
+                        </div>
+                         <div class="kv-row">
+                            <span class="kv-item"><span class="kv-label">Última Com:</span>${fmtDateTime(t.geral.ultimaCom)}</span>
+                        </div>
+                    </div>
+
+                    <div class="data-group">
+                        <div class="group-title">Técnico</div>
+                        ${t.falhas.detectada ? `<div class="kv-row text-danger"><span class="kv-label">Falha:</span>${t.falhas.detectada}</div>` : ''}
+                        
+                        <div class="kv-row">
+                             <span class="kv-item"><span class="kv-label">Manut. Última:</span>${fmtDate(t.manutencao.ultima)}</span>
+                             <span class="kv-item"><span class="kv-label">Próxima:</span>${t.manutencao.proxima ? fmtDate(t.manutencao.proxima) : '-'}</span>
+                        </div>
+                        ${t.manutencao.pecas ? `<div class="kv-row"><span class="kv-label">Peças:</span>${t.manutencao.pecas}</div>` : ''}
+                    </div>
+
+                    <div class="data-group">
+                        <div class="group-title">Pendências e Obs</div>
+                        <div class="kv-row ${t.pendencias.servico ? 'text-danger' : ''}">
+                            <span class="kv-label">Serviço:</span>${t.pendencias.servico || 'Nada consta'}
+                        </div>
+                        <div class="kv-row ${t.pendencias.material ? 'text-danger' : ''}">
+                            <span class="kv-label">Material:</span>${t.pendencias.material || 'Nada consta'}
+                        </div>
+                         ${t.observacoes ? `<div class="kv-row" style="margin-top:5px; font-style:italic; color:#555">"${t.observacoes}"</div>` : ''}
+                         ${t.fotos.length > 0 ? `<div class="kv-row" style="margin-top:5px; color:var(--primary)">📷 ${t.fotos.length} fotos anexadas</div>` : ''}
+                    </div>
                 </div>
 
                 <div class="card-footer">
-                     <button class="btn-pdf" onclick="app.generatePDF(${t.id})">📄 PDF</button>
-                    <button class="btn-edit" onclick="app.editTower(${t.id})">✏️ Editar</button>
+                    <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">PDF</button>
+                    <button class="btn-card btn-edit" onclick="app.editTower(${t.id})">Editar</button>
                 </div>
             `;
             container.appendChild(div);
         });
     },
 
+    // --- PDF ENGINE ---
+    
+    // Helper para desenhar uma torre em uma página do PDF
+    drawTowerPage(doc, t, isGlobal = false) {
+        let y = 20;
+        
+        // Título
+        doc.setFontSize(16); doc.setTextColor(0, 86, 179);
+        doc.text(`Relatório Técnico: ${t.nome}`, 105, y, null, null, "center");
+        y += 8;
+        doc.setFontSize(10); doc.setTextColor(100);
+        doc.text(`Gerado em: ${new Date().toLocaleString()}`, 105, y, null, null, "center");
+        y += 12;
+
+        // Função interna para desenhar blocos
+        const drawBlock = (title, contentObj) => {
+            doc.setFillColor(240, 240, 240); 
+            doc.rect(14, y-6, 182, 8, 'F'); 
+            doc.setFontSize(12); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+            doc.text(title, 16, y);
+            y += 8;
+            
+            doc.setFontSize(10); doc.setFont("helvetica", "normal");
+            
+            Object.entries(contentObj).forEach(([k, v]) => {
+                let label = k.charAt(0).toUpperCase() + k.slice(1);
+                // Tratamento de labels
+                if(k === 'ultimaCom') label = 'Última Comunicação';
+                if(k === 'ultima') label = 'Última Manutenção';
+                
+                let valStr = v ? v.toString() : "---";
+                if (k.includes('ultima') || k.includes('proxima')) {
+                     if(v) valStr = new Date(v).toLocaleString();
+                }
+
+                // Verifica se precisa de nova página
+                if (y > 270) { doc.addPage(); y = 20; }
+
+                doc.setFont("helvetica", "bold");
+                doc.text(`${label}:`, 16, y);
+                doc.setFont("helvetica", "normal");
+                
+                const splitVal = doc.splitTextToSize(valStr, 130);
+                doc.text(splitVal, 60, y);
+                y += (splitVal.length * 5) + 2;
+            });
+            y += 4;
+        };
+
+        drawBlock("Dados Gerais", t.geral);
+        drawBlock("Status & Falhas", { status: t.status, ...t.falhas });
+        drawBlock("Manutenção", t.manutencao);
+        
+        // Pendências (em vermelho se houver)
+        if (t.pendencias.servico || t.pendencias.material) doc.setTextColor(200, 0, 0);
+        drawBlock("Pendências", t.pendencias);
+        doc.setTextColor(0);
+
+        if(t.observacoes) {
+             doc.setFont("helvetica", "bold"); doc.text("Observações:", 16, y);
+             doc.setFont("helvetica", "normal");
+             const obs = doc.splitTextToSize(t.observacoes, 170);
+             doc.text(obs, 16, y+5);
+             y += (obs.length * 5) + 10;
+        }
+
+        // Fotos
+        if(t.fotos.length > 0) {
+            y += 5;
+            if(y > 200) { doc.addPage(); y = 20; } // Pula página se tiver no fim
+            doc.setFont("helvetica", "bold"); doc.text("Anexos Fotográficos:", 16, y);
+            y += 10;
+            
+            t.fotos.forEach((foto, i) => {
+                if(y > 220) { doc.addPage(); y = 20; }
+                // Imagem pequena para caber no relatorio
+                try {
+                    doc.addImage(foto, 'JPEG', 20, y, 80, 60); 
+                    // Se for par, desenha ao lado, se impar, quebra linha (lógica simples aqui: lista vertical)
+                    doc.text(`Foto ${i+1}`, 110, y+30);
+                    y += 70;
+                } catch(e) { console.error("Erro img", e); }
+            });
+        }
+    },
+
+    // PDF de uma única torre
+    generatePDF(id) {
+        const t = this.towers.find(x => x.id == id);
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        this.drawTowerPage(doc, t);
+        doc.save(`Torre_${t.nome}.pdf`);
+    },
+
+    // RELATÓRIO GERAL (TODAS AS TORRES)
+    generateGlobalPDF() {
+        if(!confirm("Gerar relatório completo de todas as torres? Isso pode levar alguns segundos.")) return;
+        
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        // Capa
+        doc.setFontSize(22); doc.setTextColor(0, 86, 179);
+        doc.text("Relatório Geral da Rede", 105, 100, null, null, "center");
+        doc.setFontSize(14); doc.setTextColor(50);
+        doc.text(`Total de Torres: ${this.towers.length}`, 105, 115, null, null, "center");
+        doc.text(`Data: ${new Date().toLocaleDateString()}`, 105, 125, null, null, "center");
+        
+        // Ordena
+        const listaOrdenada = [...this.towers].sort((a,b) => a.id - b.id);
+
+        // Gera paginas
+        listaOrdenada.forEach((t, index) => {
+            doc.addPage(); // Nova página para cada torre
+            // Adiciona numeração de página no rodapé
+            doc.setFontSize(8); doc.setTextColor(150);
+            doc.text(`Página ${index + 1}`, 200, 290, null, null, "right");
+            
+            this.drawTowerPage(doc, t, true);
+        });
+
+        doc.save(`Relatorio_Geral_Rede_${new Date().toISOString().slice(0,10)}.pdf`);
+    },
+
+    // --- RESTANTE DO CÓDIGO (Modal, Sync, etc) ---
     filterList() {
         const term = document.getElementById('search').value.toLowerCase();
-        const filtered = this.towers.filter(t => t.nome.toLowerCase().includes(term));
+        const filtered = this.towers.filter(t => 
+            t.nome.toLowerCase().includes(term) || 
+            t.status.toLowerCase().includes(term) ||
+            t.falhas.detectada.toLowerCase().includes(term)
+        );
         this.renderList(filtered);
     },
 
-    // --- MODAL E EDIÇÃO ---
+    openModal() { /* Removido botão criar, apenas editar */ },
+    
     closeModal() {
         document.getElementById('modal').style.display = 'none';
-        this.tempPhotos = []; // Limpa fotos temporárias
+        this.tempPhotos = [];
     },
 
     editTower(id) {
         const t = this.towers.find(x => x.id == id);
         if (!t) return;
         
+        this.tempPhotos = [...t.fotos] || [];
         document.getElementById('tower-form').reset();
         document.getElementById('image-preview-container').innerHTML = '';
-        this.tempPhotos = [...t.fotos] || []; // Copia fotos existentes
-
-        // Popula os campos do formulário com os dados aninhados
+        
         document.getElementById('tower-id').value = t.id;
         document.getElementById('f-nome').value = t.nome;
         document.getElementById('f-status').value = t.status;
         
+        // Popula campos aninhados
         document.getElementById('f-geral-local').value = t.geral.localizacao;
         document.getElementById('f-geral-prio').value = t.geral.prioridade;
         document.getElementById('f-geral-tec').value = t.geral.tecnico;
         document.getElementById('f-geral-ultimacom').value = t.geral.ultimaCom;
-
+        
         document.getElementById('f-falhas-detectada').value = t.falhas.detectada;
         document.getElementById('f-falhas-historico').value = t.falhas.historico;
         document.getElementById('f-falhas-acao').value = t.falhas.acao;
-
+        
         document.getElementById('f-manu-ultima').value = t.manutencao.ultima;
         document.getElementById('f-manu-proxima').value = t.manutencao.proxima;
         document.getElementById('f-manu-custo').value = t.manutencao.custo;
         document.getElementById('f-manu-pecas').value = t.manutencao.pecas;
-
+        
         document.getElementById('f-pend-servico').value = t.pendencias.servico;
         document.getElementById('f-pend-material').value = t.pendencias.material;
-        
         document.getElementById('f-obs').value = t.observacoes;
-
+        
         this.renderImagePreviews();
         document.getElementById('modal').style.display = 'block';
     },
 
-     // --- GERENCIAMENTO DE FOTOS (Otimizado para Mobile) ---
-     handleImagePreview(event) {
+    handleImagePreview(event) {
         const files = event.target.files;
         if (!files) return;
-
-        const remainingSlots = 3 - this.tempPhotos.length;
-        const filesToProcess = Array.from(files).slice(0, remainingSlots);
-
-        if (files.length > remainingSlots) alert("Máximo de 3 fotos permitido.");
-
-        filesToProcess.forEach(file => {
-             // Redimensiona a imagem no cliente antes de salvar para economizar espaço no IndexedDB
-             this.resizeImage(file, 800, 800, (resizedBase64) => {
-                 this.tempPhotos.push(resizedBase64);
+        const remaining = 3 - this.tempPhotos.length;
+        Array.from(files).slice(0, remaining).forEach(file => {
+             this.resizeImage(file, 800, 800, (b64) => {
+                 this.tempPhotos.push(b64);
                  this.renderImagePreviews();
              });
         });
-        event.target.value = ''; // Limpa o input
     },
 
-    // Função auxiliar para redimensionar imagens usando Canvas
-    resizeImage(file, maxWidth, maxHeight, callback) {
+    resizeImage(file, w, h, cb) {
         const reader = new FileReader();
         reader.readAsDataURL(file);
-        reader.onload = (event) => {
+        reader.onload = (e) => {
             const img = new Image();
-            img.src = event.target.result;
+            img.src = e.target.result;
             img.onload = () => {
-                let width = img.width;
-                let height = img.height;
-                 // Lógica de redimensionamento proporcional
-                if (width > height) {
-                    if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; }
-                } else {
-                    if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; }
-                }
+                let ratio = Math.min(w / img.width, h / img.height);
+                // Se a imagem for menor que o limite, não aumenta
+                if (ratio > 1) ratio = 1; 
+                
                 const canvas = document.createElement('canvas');
-                canvas.width = width; canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                // Retorna JPEG com qualidade 0.7
-                callback(canvas.toDataURL('image/jpeg', 0.7));
+                canvas.width = img.width * ratio;
+                canvas.height = img.height * ratio;
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                cb(canvas.toDataURL('image/jpeg', 0.6)); // Compressão 0.6
             };
         };
     },
 
     renderImagePreviews() {
-        const container = document.getElementById('image-preview-container');
-        container.innerHTML = '';
-        this.tempPhotos.forEach((photoB64, index) => {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'img-preview-wrapper';
-            wrapper.innerHTML = `
-                <img src="${photoB64}" class="img-preview">
-                <button type="button" class="btn-remove-img" onclick="app.removePhoto(${index})">&times;</button>
-            `;
-            container.appendChild(wrapper);
+        const c = document.getElementById('image-preview-container');
+        c.innerHTML = '';
+        this.tempPhotos.forEach((src, i) => {
+            const d = document.createElement('div');
+            d.innerHTML = `<img src="${src}" class="img-preview" onclick="app.removePhoto(${i})">`;
+            c.appendChild(d);
         });
     },
-
-    removePhoto(index) {
-        this.tempPhotos.splice(index, 1);
+    
+    removePhoto(i) {
+        this.tempPhotos.splice(i, 1);
         this.renderImagePreviews();
     },
 
-    // --- SALVAR E SINCRONIZAR ---
     async saveTower(e) {
         e.preventDefault();
         const id = parseInt(document.getElementById('tower-id').value);
         
-        //Reconstruindo o objeto complexo
         const tower = {
             id: id,
             nome: document.getElementById('f-nome').value,
@@ -242,99 +381,18 @@ const app = {
                 material: document.getElementById('f-pend-material').value
             },
             observacoes: document.getElementById('f-obs').value,
-            fotos: this.tempPhotos, // Salva o array de base64
+            fotos: this.tempPhotos,
             updatedAt: new Date().toISOString()
         };
 
         await idb.put('towers', tower);
         await idb.put('outbox', tower);
-
         this.towers = await idb.getAll('towers');
         this.renderList();
         this.closeModal();
-
         if (navigator.onLine) this.processOutbox();
     },
 
-     // --- PDF GERATOR (Layout baseado na imagem) ---
-    generatePDF(id) {
-        const t = this.towers.find(x => x.id == id);
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        let y = 15; // Cursor vertical
-
-        // Header
-        doc.setFontSize(18); doc.setTextColor(0, 86, 179);
-        doc.text(`Relatório Técnico: ${t.nome}`, 105, y, null, null, "center");
-        y += 10;
-        doc.setFontSize(12); doc.setTextColor(50);
-        doc.text(`Status: ${t.status}`, 14, y);
-        y += 10;
-        
-        // Helper para desenhar seções
-        const drawSection = (title, dataObj) => {
-            doc.setFontSize(14); doc.setTextColor(0);
-            doc.setFillColor(240, 240, 240); doc.rect(14, y-5, 182, 8, 'F'); // Fundo cinza no titulo
-            doc.text(title, 16, y);
-            y += 8;
-            doc.setFontSize(11);
-            Object.entries(dataObj).forEach(([key, value]) => {
-                 // Formata labels (ex: ultimaCom -> Última Com)
-                let label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                if(key.includes("Com")) label = "Última Comunicação";
-                 // Limpa valores nulos ou datas
-                let displayValue = value || "---";
-                if(key.includes("ultima") && value) displayValue = new Date(value).toLocaleString();
-
-                doc.text(`${label}:`, 16, y);
-                // Quebra de linha automática para textos longos
-                const splitText = doc.splitTextToSize(displayValue.toString(), 130);
-                doc.text(splitText, 65, y);
-                y += (splitText.length * 5) + 2;
-            });
-            y += 5;
-        };
-
-        drawSection("Informações Gerais", t.geral);
-        drawSection("Falhas e Ações", t.falhas);
-        drawSection("Manutenção", t.manutencao);
-        
-        // Seção Pendências com destaque se houver
-        if(t.pendencias.servico || t.pendencias.material) {
-             doc.setTextColor(220, 53, 69); // Vermelho
-             drawSection("PENDÊNCIAS ALERT", t.pendencias);
-             doc.setTextColor(50);
-        } else {
-             drawSection("Pendências", t.pendencias);
-        }
-        
-        // Observações
-        doc.setFontSize(14); doc.text("Observações", 16, y); y+=8;
-        doc.setFontSize(11);
-        const obsText = doc.splitTextToSize(t.observacoes || "Sem observações.", 180);
-        doc.text(obsText, 16, y);
-        y += (obsText.length * 5) + 10;
-
-        // Fotos
-        if (t.fotos.length > 0) {
-            doc.addPage();
-            doc.setFontSize(14); doc.text("Anexos Fotográficos", 16, 20);
-            let imgY = 30;
-            t.fotos.forEach((photoB64, i) => {
-                 // Adiciona imagem (formato JPEG, posição X, Y, Largura, Altura)
-                doc.addImage(photoB64, 'JPEG', 20, imgY, 160, 120);
-                doc.text(`Foto ${i+1}`, 20, imgY + 125);
-                imgY += 140;
-                // Se passar de 2 fotos na página, cria nova página
-                if (i === 1 && t.fotos.length > 2) { doc.addPage(); imgY = 30; }
-            });
-        }
-
-        doc.save(`relatorio_${t.nome.replace(' ','')}.pdf`);
-    },
-
-    // --- SINCRONIZAÇÃO (Mantida do original) ---
     async updateOnlineStatus() {
         const el = document.getElementById('connection-status');
         if (navigator.onLine) {
@@ -346,34 +404,31 @@ const app = {
     },
 
     async processOutbox() {
-        const outboxItems = await idb.getAll('outbox');
-        if (outboxItems.length === 0) return;
-        console.log(`Syncing ${outboxItems.length} items...`);
+        const items = await idb.getAll('outbox');
+        if (items.length === 0) return;
         try {
-            const res = await fetch('/api/towers', {
+            await fetch('/api/towers', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(outboxItems)
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(items)
             });
-            if (res.ok) { await idb.clear('outbox'); console.log('Sync concluído'); }
-        } catch (err) { console.error('Falha no sync:', err); }
+            await idb.clear('outbox');
+        } catch(e) { console.error(e); }
     },
 
     async syncNow() {
-        if (!navigator.onLine) return alert("Você está offline.");
+        if (!navigator.onLine) return alert("Offline");
         await this.processOutbox();
         try {
             const res = await fetch('/api/towers');
-            const remoteData = await res.json();
-            if (Array.isArray(remoteData) && remoteData.length > 0) {
-                for (const item of remoteData) await idb.put('towers', item);
+            const data = await res.json();
+            if(Array.isArray(data) && data.length > 0) {
+                for(const t of data) await idb.put('towers', t);
                 this.towers = await idb.getAll('towers');
                 this.renderList();
                 alert("Sincronizado!");
-            } else {
-                 console.log("Servidor vazio ou sem novos dados.");
             }
-        } catch (e) { console.error("Erro sync remote", e); }
+        } catch(e) { console.error(e); }
     }
 };
 
