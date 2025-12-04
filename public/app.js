@@ -16,14 +16,14 @@ const app = {
     // =================================================================
     // 2. SUAS CHAVES DO FIREBASE (JÁ CONFIGUREI PARA VOCÊ)
     // =================================================================
-    firebaseConfig: {
-        apiKey: "AIzaSyAbWgRpYBguSf5J9xYG7EwH6tx0xxBEvV4",
-        authDomain: "gestao-torres.firebaseapp.com",
-        projectId: "gestao-torres",
-        storageBucket: "gestao-torres.firebasestorage.app",
-        messagingSenderId: "580007649384",
-        appId: "1:580007649384:web:568bd6c711bb9e0df35bdd",
-        measurementId: "G-P6N25K7R4X"
+ firebaseConfig: {
+        apiKey: "AIzaSyCvnPi_4kZdyMjsbcfiIeaM0Qid8qDDyyg",
+        authDomain: "gestao-torres-v2.firebaseapp.com",
+        projectId: "gestao-torres-v2",
+        storageBucket: "gestao-torres-v2.firebasestorage.app",
+        messagingSenderId: "728720990458",
+        appId: "1:728720990458:web:b48fc14eb41be2ad732943",
+        measurementId: "G-LJD922VTQ4"
     },
 
  // --- SELEÇÃO DE LOCAL ---
