@@ -1,11 +1,12 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+// ===============================
+// Firebase Configuração Oficial
+// ===============================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { getStorage } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-storage.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// === SUA CONFIGURAÇÃO QUE VOCÊ ENVIOU ===
 const firebaseConfig = {
   apiKey: "AIzaSyAbWgRpYBguSf5J9xYG7EwH6tx0xxBEvV4",
   authDomain: "gestao-torres.firebaseapp.com",
@@ -16,6 +17,16 @@ const firebaseConfig = {
   measurementId: "G-P6N25K7R4X"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+// ===============================
+// Inicializar Firebase
+// ===============================
+export const app = initializeApp(firebaseConfig);
+
+// Firestore
+export const db = getFirestore(app);
+
+// Storage para Upload de Fotos
+export const storage = getStorage(app);
+
+// Auth (opcional — login futuramente)
+export const auth = getAuth(app);
