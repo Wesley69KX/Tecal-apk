@@ -24,63 +24,46 @@ const app = {
     // --- INICIALIZAÇÃO ---
     async init() {
         try {
-            // Inicializa Firebase usando o método compatível com navegador
-            if (!firebase.apps.length) {
-                firebase.initializeApp(this.firebaseConfig);
-            }
+            if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
             this.db = firebase.firestore();
-
-            // Inicializa Banco Local
             await idb.open();
 
-            // Listener em Tempo Real (Google -> App)
-            // Isso tira o aviso de "Carregando" assim que conectar
+            // Listener Firebase
             this.db.collection('towers').onSnapshot((snapshot) => {
-                // ESCONDE O AVISO DE CARREGANDO
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
 
                 if (!snapshot.empty) {
                     const cloudData = [];
                     snapshot.forEach(doc => cloudData.push(doc.data()));
-                    
                     this.towers = cloudData;
                     this.updateLocalBackup(cloudData);
                     this.renderList();
                 } else {
-                    // Se nuvem vazia, verifica local ou cria seeds
                     this.checkDataIntegrity();
                 }
             }, (error) => {
-                console.log("Modo Offline ativado.");
-                // Se der erro de conexão, esconde msg e carrega local
+                console.log("Offline mode.");
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 this.loadFromLocal();
             });
-
         } catch (e) {
-            console.error("Erro na inicialização:", e);
-            alert("Erro ao conectar. Verifique o console.");
-            const loading = document.getElementById('loading-msg');
-            if(loading) loading.style.display = 'none';
+            console.error("Erro init:", e);
             this.loadFromLocal();
         }
 
         this.updateOnlineStatus();
         window.addEventListener('online', () => this.updateOnlineStatus());
         window.addEventListener('offline', () => this.updateOnlineStatus());
-        
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./service-worker.js').catch(console.error);
-        }
+        if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
     },
 
     async checkDataIntegrity() {
         const localData = await idb.getAll('towers');
         if (localData.length > 0) {
             this.towers = localData;
-            if(navigator.onLine) this.syncNow(); 
+            if(navigator.onLine) this.syncNow();
         } else {
             await this.seedDatabase(); 
         }
@@ -89,7 +72,7 @@ const app = {
 
     async loadFromLocal() {
         this.towers = await idb.getAll('towers');
-        if (this.towers.length === 0) await this.seedDatabase();
+        if(this.towers.length === 0) await this.seedDatabase();
         this.renderList();
     },
 
@@ -98,15 +81,12 @@ const app = {
         for (const t of data) await idb.put('towers', t);
     },
 
-    // --- CRIA ESTRUTURA VAZIA ---
     async seedDatabase() {
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
 
         for (let i = 1; i <= 25; i++) {
             const idStr = i.toString().padStart(2, '0');
-            const docRef = this.db ? this.db.collection('towers').doc(String(i)) : null;
-            
             const tower = {
                 id: i,
                 nome: `ER ${idStr}`,
@@ -115,20 +95,19 @@ const app = {
                 falhas: { detectada: "", historico: "", acao: "" },
                 manutencao: { ultima: "", custo: "", pecas: "", proxima: "" },
                 pendencias: { servico: "", material: "" },
-                observacoes: "",
-                fotos: [],
-                updatedAt: nowStr
+                observacoes: "", fotos: [], updatedAt: nowStr
             };
-            
             await idb.put('towers', tower);
-            if(batch && docRef) batch.set(docRef, tower);
+            if(batch) {
+                const docRef = this.db.collection('towers').doc(String(i));
+                batch.set(docRef, tower);
+            }
         }
         if(batch) await batch.commit();
         this.towers = await idb.getAll('towers');
         this.renderList();
     },
 
-    // --- SALVAR ---
     async saveTower(e) {
         e.preventDefault();
         const id = parseInt(document.getElementById('tower-id').value);
@@ -165,26 +144,17 @@ const app = {
         };
 
         await idb.put('towers', tower);
-        
         if (navigator.onLine && this.db) {
-            try {
-                await this.db.collection('towers').doc(String(id)).set(tower);
-                alert("Salvo na Nuvem!");
-            } catch (error) {
-                alert("Salvo Offline (Erro na nuvem).");
-            }
-        } else {
-            alert("Salvo Offline.");
-        }
+            try { await this.db.collection('towers').doc(String(id)).set(tower); alert("Salvo na Nuvem!"); }
+            catch (error) { alert("Salvo Offline."); }
+        } else { alert("Salvo Offline."); }
         this.closeModal();
-        this.loadFromLocal();
     },
 
-    // --- RENDERIZAR CARDS ---
+    // --- RENDERIZAÇÃO COMPLETA NO CARD ---
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
-        
         if(!list || list.length === 0) return;
 
         list.sort((a, b) => a.id - b.id);
@@ -193,25 +163,62 @@ const app = {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
             
-            const hasPendencia = (t.pendencias.material && t.pendencias.material.length > 1) || 
-                                 (t.pendencias.servico && t.pendencias.servico.length > 1) || 
-                                 (t.falhas.detectada && t.falhas.detectada.length > 1);
+            // Verifica pendências para o alerta
+            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
+                             (t.pendencias.servico && t.pendencias.servico.length > 1) || 
+                             (t.falhas.detectada && t.falhas.detectada.length > 1) ||
+                             t.status === "Falha";
             
-            const pendenciaAlert = hasPendencia ? `<div class="warning-alert">⚠️ Pendências</div>` : '';
-            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
+            const alertHTML = hasAlert ? `<div class="warning-alert">Pendências encontradas — verifique!</div>` : '';
 
+            // Formatação de datas e valores nulos
+            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
+            const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
+            const val = (v) => (v && v.length > 0) ? v : '-';
+
+            // HTML DO CARD COMPLETO
             div.innerHTML = `
                 <div class="card-header">
                     <strong>🔔 ${t.nome}</strong>
-                    <div class="st-${t.status}"><span class="status-pill">${t.status}</span></div>
+                    <span class="status-pill">${t.status}</span>
                 </div>
-                ${pendenciaAlert}
+                
+                ${alertHTML}
+                
                 <div class="card-body">
-                    <div class="kv-row"><span class="kv-label">Local:</span>${t.geral.localizacao || '-'}</div>
-                    <div class="kv-row"><span class="kv-label">Técnico:</span>${t.geral.tecnico || '-'}</div>
-                    <div class="kv-row"><span class="kv-label">Manut.:</span>${fmtDate(t.manutencao.ultima)}</div>
-                    ${t.fotos.length > 0 ? `<div class="kv-row" style="color:blue">📷 ${t.fotos.length} fotos</div>` : ''}
+                    <div class="data-section">
+                        <div class="section-title">Informações Gerais</div>
+                        <div class="info-row"><span class="info-label">Local:</span> <span class="info-value">${val(t.geral.localizacao)}</span></div>
+                        <div class="info-row"><span class="info-label">Prioridade:</span> <span class="info-value">${val(t.geral.prioridade)}</span></div>
+                        <div class="info-row"><span class="info-label">Técnico:</span> <span class="info-value">${val(t.geral.tecnico)}</span></div>
+                        <div class="info-row"><span class="info-label">Comunicação:</span> <span class="info-value">${fmtDateTime(t.geral.ultimaCom)}</span></div>
+                    </div>
+
+                    <div class="data-section">
+                        <div class="section-title">Falhas e Ações</div>
+                        <div class="info-row ${t.falhas.detectada ? 'text-red' : ''}"><span class="info-label">Detectada:</span> <span class="info-value">${val(t.falhas.detectada)}</span></div>
+                        <div class="info-row"><span class="info-label">Histórico:</span> <span class="info-value">${val(t.falhas.historico)}</span></div>
+                        <div class="info-row"><span class="info-label">Ação:</span> <span class="info-value">${val(t.falhas.acao)}</span></div>
+                    </div>
+
+                    <div class="data-section">
+                        <div class="section-title">Manutenção</div>
+                        <div class="info-row"><span class="info-label">Última:</span> <span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
+                        <div class="info-row"><span class="info-label">Próxima:</span> <span class="info-value">${fmtDate(t.manutencao.proxima)}</span></div>
+                        <div class="info-row"><span class="info-label">Custo:</span> <span class="info-value">${val(t.manutencao.custo)}</span></div>
+                        <div class="info-row"><span class="info-label">Peças:</span> <span class="info-value">${val(t.manutencao.pecas)}</span></div>
+                    </div>
+
+                    <div class="data-section">
+                        <div class="section-title">Pendências</div>
+                        <div class="info-row ${t.pendencias.servico ? 'text-red' : ''}"><span class="info-label">Serviço:</span> <span class="info-value">${val(t.pendencias.servico)}</span></div>
+                        <div class="info-row ${t.pendencias.material ? 'text-red' : ''}"><span class="info-label">Material:</span> <span class="info-value">${val(t.pendencias.material)}</span></div>
+                    </div>
+
+                    ${t.observacoes ? `<div class="obs-box">" ${t.observacoes} "</div>` : ''}
+                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; font-weight:bold; color:#0056b3">📷 ${t.fotos.length} fotos anexadas</div>` : ''}
                 </div>
+
                 <div class="card-footer">
                     <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">📄 PDF</button>
                     <button class="btn-card btn-edit" onclick="app.editTower(${t.id})">✏️ Editar</button>
@@ -221,28 +228,27 @@ const app = {
         });
     },
 
-    // --- RELATÓRIO MENSAL ---
+    // --- PDF FUNCTIONS ---
     generateMonthlyPDF() {
-        const input = prompt("Digite o Mês e Ano (ex: 12/2025):");
+        const input = prompt("Mês/Ano (ex: 12/2025):");
         if (!input) return;
         const [mes, ano] = input.split('/');
-        if (!mes || !ano) return alert("Formato inválido.");
+        if (!mes || !ano) return alert("Erro no formato.");
 
         const filtered = this.towers.filter(t => {
             if (!t.manutencao.ultima) return false;
-            const d = new Date(t.manutencao.ultima);
-            d.setHours(12);
+            const d = new Date(t.manutencao.ultima); d.setHours(12);
             return (d.getMonth() + 1) == parseInt(mes) && d.getFullYear() == parseInt(ano);
         });
 
-        if (filtered.length === 0) return alert("Nada encontrado neste mês.");
+        if (filtered.length === 0) return alert("Sem registros para este mês.");
 
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         
         if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 75, 20, 60, 30); } catch (e) {}
         doc.setFont("times", "bold"); doc.setFontSize(18);
-        doc.text("RELATÓRIO MENSAL DE MANUTENÇÃO", 105, 80, null, null, "center");
+        doc.text("RELATÓRIO MENSAL", 105, 80, null, null, "center");
         doc.text(`Período: ${input}`, 105, 100, null, null, "center");
         
         filtered.forEach((t, i) => {
@@ -252,7 +258,6 @@ const app = {
         doc.save(`Relatorio_Mensal_${mes}_${ano}.pdf`);
     },
 
-    // --- PDF GERAL (CAPA ANGLOGOLD) ---
     generateGlobalPDF() {
         if(!confirm("Gerar relatório completo?")) return;
         const { jsPDF } = window.jspdf;
@@ -282,7 +287,6 @@ const app = {
         doc.save(`Relatorio_Geral_${new Date().toISOString().slice(0,10)}.pdf`);
     },
 
-    // --- PÁGINA INDIVIDUAL ---
     drawTowerPage(doc, t, pageNumber, totalPages) {
         doc.setFont("times", "roman");
         if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 14, 10, 30, 15); } catch (e) {}
@@ -323,7 +327,6 @@ const app = {
             doc.setFont("times", "bold"); doc.text("Observações", 14, y); y+=6;
             doc.setFont("times", "italic");
             doc.text(doc.splitTextToSize(t.observacoes, 180), 14, y);
-            y += (doc.splitTextToSize(t.observacoes, 180).length * 5) + 10;
         }
         
         if(t.fotos.length > 0) {
@@ -350,7 +353,6 @@ const app = {
         }
     },
 
-    // --- UTILS ---
     filterList() {
         const term = document.getElementById('search').value.toLowerCase();
         const f = this.towers.filter(t => t.nome.toLowerCase().includes(term));
