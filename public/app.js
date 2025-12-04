@@ -26,7 +26,7 @@ const app = {
         measurementId: "G-LJD922VTQ4"
     },
 
- // --- SELEÇÃO DE LOCAL ---
+// --- SELEÇÃO DE LOCAL ---
     selectLocation(loc) {
         this.currentLocation = loc;
         this.collectionName = `towers_${loc}`; 
@@ -45,10 +45,9 @@ const app = {
             this.db = firebase.firestore();
             await idb.open();
 
-            // Listener da Coleção ESPECÍFICA
+            // Listener
             this.db.collection(this.collectionName).onSnapshot((snapshot) => {
                 document.getElementById('loading-msg').style.display = 'none';
-                
                 if (!snapshot.empty) {
                     const cloudData = [];
                     snapshot.forEach(doc => cloudData.push(doc.data()));
@@ -97,14 +96,14 @@ const app = {
         for (const t of data) await idb.put('towers', t);
     },
 
-    // --- CRIAÇÃO DE DADOS (CONFIGURADA POR LOCAL) ---
+    // --- CRIAÇÃO DE DADOS ---
     async seedDatabase() {
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
         
         // Define quantidade de torres
-        let totalTowers = 25; // Padrão (CDS, CUIABA, QUEIROZ)
-        if (this.currentLocation === 'MSG') totalTowers = 7; // MSG tem apenas 7
+        let totalTowers = 25; 
+        if (this.currentLocation === 'MSG') totalTowers = 7; 
 
         this.towers = [];
 
@@ -175,13 +174,15 @@ const app = {
         // Salva Local
         await idb.put('towers', tower);
         
-        // UI Otimista
+        // Fecha Modal
         this.closeModal();
+        
+        // Atualiza UI
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
         this.renderList();
 
-        // Envia Nuvem (Coleção Específica)
+        // Envia Nuvem
         if (navigator.onLine && this.db) {
             try {
                 await this.db.collection(this.collectionName).doc(String(id)).set(tower);
@@ -190,7 +191,7 @@ const app = {
         } else { console.log("Offline."); }
     },
 
-    // --- RENDERIZAÇÃO ---
+    // --- RENDERIZAÇÃO ROBUSTA ---
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
@@ -208,7 +209,6 @@ const app = {
                              (t.pendencias.servico && t.pendencias.servico.length > 1) || 
                              (t.falhas.detectada && t.falhas.detectada.length > 1) ||
                              t.status === "Falha";
-                             
             const alertHTML = hasAlert ? `<div class="warning-alert">Pendências encontradas — verifique!</div>` : '';
             const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
             const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
@@ -243,7 +243,7 @@ const app = {
         });
     },
 
-    // --- PDF GERAL (SUBTÍTULO POR LOCAL) ---
+    // --- PDF GERAL (SUBTÍTULOS CORRIGIDOS) ---
     generateGlobalPDF() {
         if(!confirm(`Gerar relatório completo de ${this.currentLocation}?`)) return;
         const { jsPDF } = window.jspdf;
@@ -259,11 +259,11 @@ const app = {
         doc.setFontSize(16);
         doc.text("MINERAÇÃO ANGLOGOLD ASHANTI", 105, y, null, null, "center"); y+=10;
         
-        // CONFIGURAÇÃO DOS SUBTÍTULOS
+        // CONFIGURAÇÃO DOS SUBTÍTULOS CORRIGIDA
         let subTitle = "– CDS – SANTA BÁRBARA – MG"; 
-        if(this.currentLocation === 'MSG') subTitle = "– MSG – CRIXÁS – GO"; // Crixás
-        if(this.currentLocation === 'CUIABA') subTitle = "– CUIABÁ – RAPOSOS – MG"; // Raposos
-        if(this.currentLocation === 'QUEIROZ') subTitle = "– QUEIROZ – RAPOSOS – MG"; // Raposos
+        if(this.currentLocation === 'MSG') subTitle = "– MSG – CRIXÁS – GO"; 
+        if(this.currentLocation === 'CUIABA') subTitle = "– CUIABÁ – SABARÁ – MG"; // Corrigido para Sabará
+        if(this.currentLocation === 'QUEIROZ') subTitle = "– QUEIROZ – RAPOSOS – MG";
         
         doc.text(subTitle, 105, y, null, null, "center");
         
@@ -285,7 +285,6 @@ const app = {
         doc.setFont("times", "roman");
         if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 14, 10, 30, 15); } catch (e) {}
         else doc.setFontSize(10), doc.text("TECAL", 14, 20);
-        
         doc.setFontSize(10); doc.setTextColor(80);
         doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 15, null, null, "right");
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 20, null, null, "right");
