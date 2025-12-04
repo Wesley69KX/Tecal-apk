@@ -31,7 +31,6 @@ const app = {
         this.currentLocation = loc;
         this.collectionName = `towers_${loc}`; 
         
-        // Esconde menu, mostra app
         document.getElementById('location-screen').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
         document.getElementById('current-loc-badge').innerText = loc;
@@ -46,7 +45,7 @@ const app = {
             this.db = firebase.firestore();
             await idb.open();
 
-            // Listener da Coleção ESPECÍFICA
+            // Listener Tempo Real
             this.db.collection(this.collectionName).onSnapshot((snapshot) => {
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
@@ -101,12 +100,11 @@ const app = {
         for (const t of data) await idb.put('towers', t);
     },
 
-    // --- CRIAÇÃO DE DADOS (CONFIGURADA POR LOCAL) ---
+    // --- CRIAÇÃO DE DADOS ---
     async seedDatabase() {
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
         
-        // Define quantidade de torres
         let totalTowers = 25; 
         if (this.currentLocation === 'MSG') totalTowers = 7; 
 
@@ -118,7 +116,6 @@ const app = {
                 id: i,
                 nome: `ER ${idStr}`,
                 status: "Operando",
-                // Campos Vazios para preenchimento
                 geral: { localizacao: this.currentLocation, prioridade: "Média", tecnico: "", ultimaCom: "" },
                 falhas: { detectada: "", historico: "", acao: "" },
                 manutencao: { ultima: "", custo: "", pecas: "", proxima: "" },
@@ -141,95 +138,11 @@ const app = {
         this.renderList();
     },
 
-    // --- RENDERIZAÇÃO ROBUSTA (VISUAL NOVO) ---
-    renderList(list = this.towers) {
-        const container = document.getElementById('tower-list');
-        container.innerHTML = '';
-        
-        if(!list || list.length === 0) {
-            container.innerHTML = '<p style="text-align:center; color:#888; margin-top:30px;">Carregando ou sem dados...</p>';
-            return;
-        }
-
-        list.sort((a, b) => a.id - b.id);
-
-        list.forEach(t => {
-            const div = document.createElement('div');
-            // Define a cor da borda lateral baseada no status
-            div.className = `card st-${t.status.replace(' ','')}`;
-            
-            // Verifica se existe alguma pendência ou falha para mostrar o alerta amarelo
-            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
-                             (t.pendencias.servico && t.pendencias.servico.length > 1) || 
-                             (t.falhas.detectada && t.falhas.detectada.length > 1) ||
-                             t.status === "Falha";
-            
-            const alertHTML = hasAlert ? `<div class="warning-alert">Pendências encontradas — verifique!</div>` : '';
-
-            // Funções para formatar data e tratar texto vazio
-            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
-            const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
-            const val = (v) => (v && v.length > 0) ? v : '-';
-
-            // HTML DO CARD DETALHADO (GRID LAYOUT)
-            div.innerHTML = `
-                <div class="card-header">
-                    <div class="card-title">🗼 ${t.nome}</div>
-                    <div class="card-status">${t.status}</div>
-                </div>
-                
-                ${alertHTML}
-                
-                <div class="card-body">
-                    <div class="info-grid">
-                        <div class="info-item">
-                            <span class="info-label">Localização</span>
-                            <span class="info-value">${val(t.geral.localizacao)}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Técnico</span>
-                            <span class="info-value">${val(t.geral.tecnico)}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Última Manut.</span>
-                            <span class="info-value">${fmtDate(t.manutencao.ultima)}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Comunicação</span>
-                            <span class="info-value">${fmtDate(t.geral.ultimaCom)} ${fmtDate(t.geral.ultimaCom) !== '-' ? new Date(t.geral.ultimaCom).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : ''}</span>
-                        </div>
-                        
-                        <div class="divider"></div> <div class="info-item" style="grid-column: 1 / -1;">
-                            <span class="info-label">Falha Detectada</span>
-                            <span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span>
-                        </div>
-                        
-                        <div class="info-item" style="grid-column: 1 / -1;">
-                            <span class="info-label">Pendência Material</span>
-                            <span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span>
-                        </div>
-                    </div>
-
-                    ${t.observacoes ? `<div class="obs-text">"${t.observacoes}"</div>` : ''}
-                    
-                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; font-size:0.85rem; color:#0056b3; font-weight:bold;">📷 ${t.fotos.length} fotos anexadas</div>` : ''}
-                </div>
-
-                <div class="card-footer">
-                    <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">📄 PDF</button>
-                    <button class="btn-card btn-edit" onclick="app.editTower(${t.id})">✏️ Editar</button>
-                </div>
-            `;
-            container.appendChild(div);
-        });
-    },
-
-    // --- SALVAR ---
+    // --- SALVAR (Incluindo fotos ilimitadas) ---
     async saveTower(e) {
         e.preventDefault();
         const id = parseInt(document.getElementById('tower-id').value);
-        const existing = this.towers.find(x => x.id === id) || {};
-
+        
         const tower = {
             id: id,
             nome: document.getElementById('f-nome').value,
@@ -256,38 +169,119 @@ const app = {
                 material: document.getElementById('f-pend-material').value
             },
             observacoes: document.getElementById('f-obs').value,
-            fotos: this.tempPhotos.length > 0 ? this.tempPhotos : (existing.fotos || []),
+            // AQUI ESTÁ A CORREÇÃO: Salva o que está na tela (tempPhotos)
+            fotos: this.tempPhotos, 
             updatedAt: new Date().toISOString()
         };
 
-        // Salva Local
         await idb.put('towers', tower);
-        
-        // Fecha Modal
         this.closeModal();
         
-        // Atualiza UI
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
         this.renderList();
 
-        // Envia Nuvem
         if (navigator.onLine && this.db) {
             try {
                 await this.db.collection(this.collectionName).doc(String(id)).set(tower);
-                console.log("Sync OK.");
-            } catch (error) { console.error(error); }
-        } else { console.log("Offline."); }
+                console.log("Sincronizado na nuvem.");
+            } catch (error) { console.error("Erro sync:", error); }
+        } else { console.log("Salvo offline."); }
     },
 
-    // --- PDF GERAL (SUBTÍTULOS CORRIGIDOS) ---
+    // --- RENDERIZAÇÃO ROBUSTA ---
+    renderList(list = this.towers) {
+        const container = document.getElementById('tower-list');
+        container.innerHTML = '';
+        if(!list || list.length === 0) {
+            container.innerHTML = '<p style="text-align:center; margin-top:20px;">Carregando...</p>';
+            return;
+        }
+        list.sort((a, b) => a.id - b.id);
+
+        list.forEach(t => {
+            const div = document.createElement('div');
+            div.className = `card st-${t.status.replace(' ','')}`;
+            
+            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
+                             (t.pendencias.servico && t.pendencias.servico.length > 1) || 
+                             (t.falhas.detectada && t.falhas.detectada.length > 1) ||
+                             t.status === "Falha";
+            
+            const alertHTML = hasAlert ? `<div class="warning-alert">Pendências encontradas — verifique!</div>` : '';
+            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
+            const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
+            const val = (v) => (v && v.length > 0) ? v : '-';
+
+            div.innerHTML = `
+                <div class="card-header">
+                    <div class="card-title">🗼 ${t.nome}</div>
+                    <div class="card-status">${t.status}</div>
+                </div>
+                ${alertHTML}
+                <div class="card-body">
+                    <div class="info-grid">
+                        <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(t.geral.localizacao)}</span></div>
+                        <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(t.geral.tecnico)}</span></div>
+                        <div class="info-item"><span class="info-label">Última Manut.</span><span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
+                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDate(t.geral.ultimaCom)} ${fmtDate(t.geral.ultimaCom) !== '-' ? new Date(t.geral.ultimaCom).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : ''}</span></div>
+                        <div class="divider"></div>
+                        <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Falha Detectada</span><span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span></div>
+                        <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Pendência Material</span><span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span></div>
+                    </div>
+                    ${t.observacoes ? `<div class="obs-text">"${t.observacoes}"</div>` : ''}
+                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; font-size:0.85rem; color:#0056b3; font-weight:bold;">📷 ${t.fotos.length} fotos anexadas</div>` : ''}
+                </div>
+                <div class="card-footer">
+                    <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">📄 PDF</button>
+                    <button class="btn-card btn-edit" onclick="app.editTower(${t.id})">✏️ Editar</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    },
+
+    // --- FOTOS ILIMITADAS E HD ---
+    handleImagePreview(e) { 
+        Array.from(e.target.files).forEach(file => { 
+            // Aumentei para 1280px e qualidade 0.8 (HD)
+            this.resizeImage(file, 1280, 1280, (b64) => { 
+                // REMOVIDO O LIMITE DE 3 FOTOS. Agora é infinito.
+                this.tempPhotos.push(b64); 
+                this.renderImagePreviews(); 
+            }); 
+        });
+    },
+
+    resizeImage(file, w, h, cb) { 
+        const reader = new FileReader(); reader.readAsDataURL(file);
+        reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); 
+        // Qualidade aumentada para 0.8
+        cb(c.toDataURL('image/jpeg',0.8)); }; };
+    },
+
+    // Renderiza as miniaturas com botão de EXCLUIR
+    renderImagePreviews() { 
+        const c = document.getElementById('image-preview-container'); c.innerHTML = '';
+        this.tempPhotos.forEach((src, i) => { 
+            const wrapper = document.createElement('div');
+            wrapper.className = 'photo-wrapper';
+            wrapper.innerHTML = `
+                <img src="${src}" class="img-preview" onclick="window.open('${src}')">
+                <div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>
+            `;
+            c.appendChild(wrapper);
+        });
+    },
+
+    removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
+
+    // --- UTILS (PDF, Modal, etc) ---
     generateGlobalPDF() {
         if(!confirm(`Gerar relatório completo de ${this.currentLocation}?`)) return;
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        
         if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 75, 30, 60, 30); } catch (e) {}
-
         doc.setFont("times", "bold"); doc.setFontSize(18);
         let y = 90;
         doc.text("SERVIÇOS DE MANUTENÇÃO DO", 105, y, null, null, "center"); y+=10;
@@ -295,87 +289,20 @@ const app = {
         doc.text("MASSA", 105, y, null, null, "center"); y+=30;
         doc.setFontSize(16);
         doc.text("MINERAÇÃO ANGLOGOLD ASHANTI", 105, y, null, null, "center"); y+=10;
-        
-        // SUBTÍTULO DINÂMICO
         let subTitle = "– CDS – SANTA BÁRBARA – MG"; 
         if(this.currentLocation === 'MSG') subTitle = "– MSG – CRIXÁS – GO"; 
         if(this.currentLocation === 'CUIABA') subTitle = "– CUIABÁ – SABARÁ – MG"; 
         if(this.currentLocation === 'QUEIROZ') subTitle = "– QUEIROZ – RAPOSOS – MG";
-        
         doc.text(subTitle, 105, y, null, null, "center");
-        
         doc.setFontSize(12); doc.setFont("times", "normal");
         const hoje = new Date();
         const mes = hoje.toLocaleString('pt-BR', { month: 'long' });
         doc.text(`${mes.charAt(0).toUpperCase() + mes.slice(1)} de ${hoje.getFullYear()}`, 105, 260, null, null, "center");
-
         const lista = [...this.towers].sort((a,b) => a.id - b.id);
-        lista.forEach((t, i) => {
-            doc.addPage();
-            this.drawTowerPage(doc, t, i + 1, lista.length);
-        });
+        lista.forEach((t, i) => { doc.addPage(); this.drawTowerPage(doc, t, i + 1, lista.length); });
         doc.save(`Relatorio_${this.currentLocation}_${new Date().toISOString().slice(0,10)}.pdf`);
     },
 
-    // --- PDF ENGINE ---
-    drawTowerPage(doc, t, pageNumber, totalPages) {
-        doc.setFont("times", "roman");
-        if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 14, 10, 30, 15); } catch (e) {}
-        else doc.setFontSize(10), doc.text("TECAL", 14, 20);
-        
-        doc.setFontSize(10); doc.setTextColor(80);
-        doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 15, null, null, "right");
-        doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 20, null, null, "right");
-        doc.setDrawColor(0); doc.line(14, 28, 196, 28);
-        
-        let y = 40; doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
-        doc.text(`Detalhes: ${t.nome}`, 105, y, null, null, "center"); y += 15;
-        
-        const drawSection = (title, obj) => {
-            doc.setFontSize(13); doc.setFont("times", "bold"); doc.text(title, 14, y);
-            y += 2; doc.line(14, y, 196, y); y += 6;
-            doc.setFontSize(11); doc.setFont("times", "normal");
-            Object.entries(obj).forEach(([k, v]) => {
-                let val = (v && v!=='-') ? v : '---';
-                if(k.includes('ultima') || k.includes('proxima')) {
-                    try { if(v.includes('-')) val = new Date(v).toLocaleDateString('pt-BR'); } catch(e){}
-                }
-                doc.setFont("times", "bold"); doc.text(`${k.charAt(0).toUpperCase()+k.slice(1)}:`, 14, y);
-                doc.setFont("times", "normal"); 
-                doc.text(doc.splitTextToSize(val, 130), 60, y);
-                y += 7;
-            });
-            y += 5;
-        };
-
-        drawSection("Geral", t.geral);
-        drawSection("Falhas", t.falhas);
-        drawSection("Manutenção", t.manutencao);
-        drawSection("Pendências", t.pendencias);
-        
-        if(t.observacoes) {
-            doc.setFont("times", "bold"); doc.text("Observações", 14, y); y+=6;
-            doc.setFont("times", "italic");
-            doc.text(doc.splitTextToSize(t.observacoes, 180), 14, y);
-        }
-        
-        if(t.fotos.length > 0) {
-            doc.addPage(); y=30;
-            if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 14, 10, 20, 10); } catch (e) {}
-            doc.setFont("times", "bold"); doc.text("Registro Fotográfico", 105, y, null, null, "center"); y+=15;
-            t.fotos.forEach((f) => {
-                if(y>200) { doc.addPage(); y=30; }
-                try { doc.addImage(f, 'JPEG', 35, y, 140, 100); y+=105; } catch(e){}
-            });
-        }
-        
-        if(pageNumber) {
-            doc.setFontSize(9); doc.setFont("times", "normal");
-            doc.text(`Página ${pageNumber} de ${totalPages}`, 105, 290, null, null, "center");
-        }
-    },
-
-    // --- UTILS ---
     generateMonthlyPDF() {
         const input = prompt("Mês/Ano (ex: 12/2025):"); if (!input) return;
         const [mes, ano] = input.split('/'); if (!mes || !ano) return alert("Erro no formato.");
@@ -393,11 +320,41 @@ const app = {
         filtered.forEach((t, i) => { doc.addPage(); this.drawTowerPage(doc, t, i + 1, filtered.length); });
         doc.save(`Relatorio_Mensal_${mes}_${ano}.pdf`);
     },
-    generatePDF(id) { 
-        const t = this.towers.find(x => x.id == id);
-        const { jsPDF } = window.jspdf; const doc = new jsPDF();
-        this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`);
+
+    drawTowerPage(doc, t, pageNumber, totalPages) {
+        doc.setFont("times", "roman");
+        if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 14, 10, 30, 15); } catch (e) {}
+        else doc.setFontSize(10), doc.text("TECAL", 14, 20);
+        doc.setFontSize(10); doc.setTextColor(80);
+        doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 15, null, null, "right");
+        doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 20, null, null, "right");
+        doc.setDrawColor(0); doc.line(14, 28, 196, 28);
+        let y = 40; doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
+        doc.text(`Detalhes: ${t.nome}`, 105, y, null, null, "center"); y += 15;
+        
+        const drawSection = (title, obj) => {
+            doc.setFontSize(13); doc.setFont("times", "bold"); doc.text(title, 14, y);
+            y += 2; doc.line(14, y, 196, y); y += 6;
+            doc.setFontSize(11); doc.setFont("times", "normal");
+            Object.entries(obj).forEach(([k, v]) => {
+                let val = (v && v!=='-') ? v : '---';
+                if(k.includes('ultima') || k.includes('proxima')) { try { if(v.includes('-')) val = new Date(v).toLocaleDateString('pt-BR'); } catch(e){} }
+                doc.setFont("times", "bold"); doc.text(`${k.charAt(0).toUpperCase()+k.slice(1)}:`, 14, y);
+                doc.setFont("times", "normal"); doc.text(doc.splitTextToSize(val, 130), 60, y); y += 7;
+            });
+            y += 5;
+        };
+        drawSection("Geral", t.geral); drawSection("Falhas", t.falhas); drawSection("Manutenção", t.manutencao); drawSection("Pendências", t.pendencias);
+        if(t.observacoes) { doc.setFont("times", "bold"); doc.text("Observações", 14, y); y+=6; doc.setFont("times", "italic"); doc.text(doc.splitTextToSize(t.observacoes, 180), 14, y); }
+        if(t.fotos.length > 0) {
+            doc.addPage(); y=30; if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 14, 10, 20, 10); } catch (e) {}
+            doc.setFont("times", "bold"); doc.text("Registro Fotográfico", 105, y, null, null, "center"); y+=15;
+            t.fotos.forEach((f) => { if(y>200) { doc.addPage(); y=30; } try { doc.addImage(f, 'JPEG', 35, y, 140, 100); y+=105; } catch(e){} });
+        }
+        if(pageNumber) { doc.setFontSize(9); doc.setFont("times", "normal"); doc.text(`Página ${pageNumber} de ${totalPages}`, 105, 290, null, null, "center"); }
     },
+
+    generatePDF(id) { const t = this.towers.find(x => x.id == id); const { jsPDF } = window.jspdf; const doc = new jsPDF(); this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`); },
     filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
     closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
     editTower(id) { 
@@ -425,27 +382,6 @@ const app = {
         this.renderImagePreviews();
         document.getElementById('modal').style.display = 'block';
     },
-    handleImagePreview(e) { 
-        Array.from(e.target.files).forEach(file => { this.resizeImage(file, 800, 800, (b64) => { if(this.tempPhotos.length < 3) { this.tempPhotos.push(b64); this.renderImagePreviews(); } }); });
-    },
-    resizeImage(file, w, h, cb) { 
-        const reader = new FileReader(); reader.readAsDataURL(file);
-        reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',0.6)); }; };
-    },
-    renderImagePreviews() { 
-        const c = document.getElementById('image-preview-container'); c.innerHTML = '';
-        this.tempPhotos.forEach((src, i) => { const d = document.createElement('div'); d.innerHTML = `<img src="${src}" class="img-preview" onclick="app.removePhoto(${i})">`; c.appendChild(d); });
-    },
-    removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
-    updateOnlineStatus() {
-        const el = document.getElementById('connection-status');
-        el.innerText = navigator.onLine ? "Online" : "Offline";
-        el.className = navigator.onLine ? "status-badge online" : "status-badge offline";
-    },
-    syncNow() {
-        if(navigator.onLine && this.db) {
-            this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t));
-            alert("Sincronizando...");
-        } else { alert("Sem internet."); }
-    }
+    updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; },
+    syncNow() { if(navigator.onLine && this.db) { this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t)); alert("Sincronizando..."); } else { alert("Sem internet."); } }
 };
