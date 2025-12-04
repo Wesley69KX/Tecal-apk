@@ -24,4 +24,4 @@ jobs:
           # ATENÇÃO: O nome aqui deve ser IGUAL ao que você criou no Passo 3
           GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GESTAO_TORRES }}
           # Coloque o ID do seu projeto (veja na URL do console firebase: project/SEU-ID/...)
-          PROJECT_ID: gestao-torres
+          projectId: gestao-torres-v2
