@@ -18,17 +18,7 @@
 </head>
 <body>
 
-    <div id="login-screen" class="login-overlay">
-        <div class="login-box">
-            <h2>🔒 Acesso Restrito</h2>
-            <p>Sistema de Gestão de Torres</p>
-            <input type="password" id="login-pass" placeholder="Digite a senha (PIN)" pattern="[0-9]*" inputmode="numeric">
-            <button onclick="app.checkLogin()">Entrar</button>
-            <p id="login-msg" class="error-msg"></p>
-        </div>
-    </div>
-
-    <div id="app-content" style="display:none;">
+    <div id="app-content">
         <header>
             <div class="header-top">
                 <h1>Painel de Torres <span id="connection-status" class="status-badge online">...</span></h1>
@@ -111,7 +101,7 @@
 
                     <div class="modal-actions sticky-footer">
                         <button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button>
-                        <button type="submit" class="btn-save">Salvar e Sincronizar</button>
+                        <button type="submit" class="btn-save">Salvar</button>
                     </div>
                 </form>
             </div>
