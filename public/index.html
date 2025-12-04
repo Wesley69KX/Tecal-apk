@@ -4,21 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gestão de Torres</title>
+
+    <!-- PWA -->
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="style.css">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon-192.png">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-</head>
+
+    <!-- Firebase (ESSENCIAL) -->
     <script type="module" src="firebase.js"></script>
+</head>
 
 <body>
 
     <header>
         <div class="header-top">
-            <h1>Gestão de Torres <span id="connection-status" class="status-badge online">Online</span></h1>
+            <h1>Gestão de Torres 
+                <span id="connection-status" class="status-badge online">Online</span>
+            </h1>
         </div>
+
         <div class="header-actions">
             <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Relatório Geral (Todas)</button>
             <button class="btn-sync" onclick="app.syncNow()">🔄 Sync</button>
@@ -26,26 +37,36 @@
     </header>
 
     <div class="container">
-        <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre (Nome, Status, Falha)..." onkeyup="app.filterList()">
+        <input 
+            type="text" 
+            id="search" 
+            class="search-bar" 
+            placeholder="🔍 Buscar torre (Nome, Status, Falha)..." 
+            onkeyup="app.filterList()"
+        >
         
-        <div id="tower-list" class="tower-list">
-            </div>
+        <div id="tower-list" class="tower-list"></div>
     </div>
 
+    <!-- MODAL -->
     <div id="modal" class="modal">
         <div class="modal-content">
-             <div class="modal-header">
+
+            <div class="modal-header">
                 <h2 id="modal-title">Editar Torre</h2>
                 <span class="close" onclick="app.closeModal()">&times;</span>
             </div>
             
             <form id="tower-form" onsubmit="app.saveTower(event)">
                 <input type="hidden" id="tower-id">
-                
+
+                <!-- PRINCIPAL -->
                 <div class="form-section">
                     <h3>Principal</h3>
+
                     <label>Nome da Torre</label>
                     <input type="text" id="f-nome" required readonly class="readonly-input">
+
                     <label>Status Operacional</label>
                     <select id="f-status">
                         <option value="Operando">Operando</option>
@@ -54,57 +75,103 @@
                     </select>
                 </div>
 
+                <!-- INFORMAÇÕES GERAIS -->
                 <div class="form-section">
                     <h3>Informações Gerais</h3>
+
                     <label>Localização (CDS)</label>
                     <input type="text" id="f-geral-local">
+
                     <div class="two-col">
-                        <div><label>Prioridade</label>
-                             <select id="f-geral-prio"><option value="Baixa">Baixa</option><option value="Média">Média</option><option value="Alta">Alta</option></select>
+                        <div>
+                            <label>Prioridade</label>
+                            <select id="f-geral-prio">
+                                <option value="Baixa">Baixa</option>
+                                <option value="Média">Média</option>
+                                <option value="Alta">Alta</option>
+                            </select>
                         </div>
-                        <div><label>Técnico</label><input type="text" id="f-geral-tec"></div>
+
+                        <div>
+                            <label>Técnico</label>
+                            <input type="text" id="f-geral-tec">
+                        </div>
                     </div>
+
                     <label>Última Comunicação</label>
                     <input type="datetime-local" id="f-geral-ultimacom">
                 </div>
 
+                <!-- FALHAS -->
                 <div class="form-section">
                     <h3>Falhas e Ações</h3>
+
                     <label>Falha Detectada</label>
                     <input type="text" id="f-falhas-detectada">
+
                     <label>Histórico de Falha</label>
                     <textarea id="f-falhas-historico" rows="2"></textarea>
+
                     <label>Ação Requerida</label>
                     <textarea id="f-falhas-acao" rows="3"></textarea>
                 </div>
 
-                 <div class="form-section">
+                <!-- MANUTENÇÃO -->
+                <div class="form-section">
                     <h3>Manutenção</h3>
+
                     <div class="two-col">
-                        <div><label>Última Manut.</label><input type="date" id="f-manu-ultima"></div>
-                        <div><label>Próxima Manut.</label><input type="date" id="f-manu-proxima"></div>
+                        <div>
+                            <label>Última Manut.</label>
+                            <input type="date" id="f-manu-ultima">
+                        </div>
+
+                        <div>
+                            <label>Próxima Manut.</label>
+                            <input type="date" id="f-manu-proxima">
+                        </div>
                     </div>
-                    <label>Custo</label> <input type="text" id="f-manu-custo">
-                    <label>Peças Utilizadas</label> <input type="text" id="f-manu-pecas">
+
+                    <label>Custo</label>
+                    <input type="text" id="f-manu-custo">
+
+                    <label>Peças Utilizadas</label>
+                    <input type="text" id="f-manu-pecas">
                 </div>
 
+                <!-- PENDÊNCIAS -->
                 <div class="form-section warning-bg">
                     <h3>Pendências</h3>
-                    <label>Pend. Serviço</label> <input type="text" id="f-pend-servico">
-                    <label>Pend. Material</label> <input type="text" id="f-pend-material">
+
+                    <label>Pend. Serviço</label>
+                    <input type="text" id="f-pend-servico">
+
+                    <label>Pend. Material</label>
+                    <input type="text" id="f-pend-material">
                 </div>
 
+                <!-- FOTOS -->
                 <div class="form-section">
                     <h3>Fotos (Máx 3)</h3>
-                    <input type="file" id="image-input" accept="image/*" multiple onchange="app.handleImagePreview(event)">
+
+                    <input 
+                        type="file" 
+                        id="image-input" 
+                        accept="image/*" 
+                        multiple 
+                        onchange="app.handleImagePreview(event)"
+                    >
+
                     <div id="image-preview-container" class="image-preview-container"></div>
                 </div>
 
+                <!-- OBSERVAÇÕES -->
                 <div class="form-section">
                     <h3>Observações</h3>
                     <textarea id="f-obs" rows="4"></textarea>
                 </div>
 
+                <!-- BOTÕES -->
                 <div class="modal-actions sticky-footer">
                     <button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button>
                     <button type="submit" class="btn-save">Salvar Dados</button>
@@ -113,7 +180,8 @@
         </div>
     </div>
 
-    <script src="idb.js"></script>
-    <script src="app.js"></script>
+    <!-- APP PRINCIPAL -->
+    <script type="module" src="app.js"></script>
+
 </body>
 </html>
