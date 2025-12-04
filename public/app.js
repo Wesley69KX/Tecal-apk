@@ -141,67 +141,78 @@ const app = {
         this.renderList();
     },
 
-    // --- RENDERIZAÇÃO ROBUSTA (CARDS COMPLETOS) ---
+    // --- RENDERIZAÇÃO ROBUSTA (VISUAL NOVO) ---
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
+        
         if(!list || list.length === 0) {
-            container.innerHTML = '<p style="text-align:center; margin-top:20px;">Carregando...</p>';
+            container.innerHTML = '<p style="text-align:center; color:#888; margin-top:30px;">Carregando ou sem dados...</p>';
             return;
         }
+
         list.sort((a, b) => a.id - b.id);
 
         list.forEach(t => {
             const div = document.createElement('div');
+            // Define a cor da borda lateral baseada no status
             div.className = `card st-${t.status.replace(' ','')}`;
             
-            // Verifica pendências para o alerta visual
+            // Verifica se existe alguma pendência ou falha para mostrar o alerta amarelo
             const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
                              (t.pendencias.servico && t.pendencias.servico.length > 1) || 
                              (t.falhas.detectada && t.falhas.detectada.length > 1) ||
                              t.status === "Falha";
-                             
+            
             const alertHTML = hasAlert ? `<div class="warning-alert">Pendências encontradas — verifique!</div>` : '';
 
-            // Helpers de formatação
+            // Funções para formatar data e tratar texto vazio
             const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
             const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
             const val = (v) => (v && v.length > 0) ? v : '-';
 
-            // HTML COMPLETO DO CARD
+            // HTML DO CARD DETALHADO (GRID LAYOUT)
             div.innerHTML = `
                 <div class="card-header">
-                    <strong>🔔 ${t.nome}</strong>
-                    <span class="status-pill">${t.status}</span>
+                    <div class="card-title">🗼 ${t.nome}</div>
+                    <div class="card-status">${t.status}</div>
                 </div>
+                
                 ${alertHTML}
+                
                 <div class="card-body">
-                    <div class="data-section">
-                        <div class="section-title">Informações Gerais</div>
-                        <div class="info-row"><span class="info-label">Local:</span> <span class="info-value">${val(t.geral.localizacao)}</span></div>
-                        <div class="info-row"><span class="info-label">Técnico:</span> <span class="info-value">${val(t.geral.tecnico)}</span></div>
-                        <div class="info-row"><span class="info-label">Comunicação:</span> <span class="info-value">${fmtDateTime(t.geral.ultimaCom)}</span></div>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Localização</span>
+                            <span class="info-value">${val(t.geral.localizacao)}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Técnico</span>
+                            <span class="info-value">${val(t.geral.tecnico)}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Última Manut.</span>
+                            <span class="info-value">${fmtDate(t.manutencao.ultima)}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Comunicação</span>
+                            <span class="info-value">${fmtDate(t.geral.ultimaCom)} ${fmtDate(t.geral.ultimaCom) !== '-' ? new Date(t.geral.ultimaCom).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : ''}</span>
+                        </div>
+                        
+                        <div class="divider"></div> <div class="info-item" style="grid-column: 1 / -1;">
+                            <span class="info-label">Falha Detectada</span>
+                            <span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span>
+                        </div>
+                        
+                        <div class="info-item" style="grid-column: 1 / -1;">
+                            <span class="info-label">Pendência Material</span>
+                            <span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span>
+                        </div>
                     </div>
 
-                    <div class="data-section">
-                        <div class="section-title">Falhas e Ações</div>
-                        <div class="info-row ${t.falhas.detectada ? 'text-red' : ''}"><span class="info-label">Detectada:</span> <span class="info-value">${val(t.falhas.detectada)}</span></div>
-                        <div class="info-row"><span class="info-label">Ação:</span> <span class="info-value">${val(t.falhas.acao)}</span></div>
-                    </div>
-
-                    <div class="data-section">
-                        <div class="section-title">Manutenção</div>
-                        <div class="info-row"><span class="info-label">Última:</span> <span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
-                        <div class="info-row"><span class="info-label">Peças:</span> <span class="info-value">${val(t.manutencao.pecas)}</span></div>
-                    </div>
-
-                    <div class="data-section">
-                        <div class="section-title">Pendências</div>
-                        <div class="info-row ${t.pendencias.material ? 'text-red' : ''}"><span class="info-label">Material:</span> <span class="info-value">${val(t.pendencias.material)}</span></div>
-                    </div>
-
-                    ${t.observacoes ? `<div class="obs-box">" ${t.observacoes} "</div>` : ''}
-                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; font-weight:bold; color:#0056b3">📷 ${t.fotos.length} fotos anexadas</div>` : ''}
+                    ${t.observacoes ? `<div class="obs-text">"${t.observacoes}"</div>` : ''}
+                    
+                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; font-size:0.85rem; color:#0056b3; font-weight:bold;">📷 ${t.fotos.length} fotos anexadas</div>` : ''}
                 </div>
 
                 <div class="card-footer">
