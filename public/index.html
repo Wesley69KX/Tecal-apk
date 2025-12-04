@@ -18,26 +18,44 @@
 </head>
 <body>
 
-    <div id="app-content">
+    <div id="location-screen" class="login-overlay">
+        <div class="login-box">
+            <h2>📍 Selecione a Unidade</h2>
+            <p>Onde você vai trabalhar hoje?</p>
+            
+            <button class="btn-location" onclick="app.selectLocation('CDS')">
+                CDS - Santa Bárbara
+                <small>(25 Torres)</small>
+            </button>
+            
+            <button class="btn-location" onclick="app.selectLocation('MSG')">
+                MSG - Sabará
+                <small>(07 Torres)</small>
+            </button>
+            
+            <button class="btn-location" onclick="app.selectLocation('CUIABA')">
+                Cuiabá - Raposos
+                <small>(25 Torres)</small>
+            </button>
+        </div>
+    </div>
+
+    <div id="app-content" style="display:none;">
         <header>
             <div class="header-top">
-                <h1>Painel de Torres <span id="connection-status" class="status-badge offline">Carregando...</span></h1>
+                <h1><span id="current-loc-badge" class="loc-badge">CDS</span> Painel <span id="connection-status" class="status-badge online">...</span></h1>
             </div>
             <div class="header-actions">
                 <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Geral</button>
                 <button class="btn-month-pdf" onclick="app.generateMonthlyPDF()">📅 Mensal</button>
                 <button class="btn-sync" onclick="app.syncNow()">🔄 Sync</button>
+                <button class="btn-exit" onclick="window.location.reload()">Sair</button>
             </div>
         </header>
 
         <div class="container">
             <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre..." onkeyup="app.filterList()">
-            
-            <div id="loading-msg" style="text-align:center; padding:20px; color:#666;">
-                Buscando dados...<br>
-                <small>(Se demorar, verifique sua conexão ou as chaves do Firebase)</small>
-            </div>
-
+            <div id="loading-msg" style="text-align:center; padding:20px; color:#666;">Carregando dados...</div>
             <div id="tower-list" class="tower-list"></div>
         </div>
 
@@ -64,7 +82,7 @@
 
                     <div class="form-section">
                         <h3>Informações Gerais</h3>
-                        <label>Localização (CDS)</label> <input type="text" id="f-geral-local">
+                        <label>Localização</label> <input type="text" id="f-geral-local">
                         <div class="two-col">
                             <div><label>Prioridade</label><select id="f-geral-prio"><option value="Média">Média</option><option value="Alta">Alta</option><option value="Baixa">Baixa</option></select></div>
                             <div><label>Técnico</label><input type="text" id="f-geral-tec"></div>
