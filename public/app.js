@@ -1,10 +1,22 @@
-import { db, towersRef } from "./firebase.js";
+// Importa o Firestore
 import {
+  getFirestore,
+  collection,
   getDocs,
   addDoc,
   updateDoc,
+  getDoc,
   doc
 } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+// Importa a inicialização do Firebase
+import { app } from "./firebase.js";
+
+// Inicializa o Firestore
+const db = getFirestore(app);
+
+// Referência da coleção
+const towersRef = collection(db, "torres");
 
 let editingId = null;
 
@@ -15,9 +27,7 @@ async function loadFirestore() {
   const snap = await getDocs(towersRef);
   const list = [];
 
-  snap.forEach(doc => {
-    list.push({ id: doc.id, ...doc.data() });
-  });
+  snap.forEach(d => list.push({ id: d.id, ...d.data() }));
 
   render(list);
 }
