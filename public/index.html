@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gestão de Torres</title>
+    
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
     
@@ -20,28 +21,36 @@
 
     <div id="location-screen" class="login-overlay">
         <div class="login-box">
-            <h2>📍 Selecione a Unidade</h2>
-            <p>Onde você vai trabalhar hoje?</p>
+            <div class="menu-header">
+                <h2>📍 Selecione a Unidade</h2>
+                <p>Onde você vai atuar hoje?</p>
+            </div>
             
-            <button class="btn-location" onclick="app.selectLocation('QUEIROZ')">
-                Queiroz - Raposos
-                <small>(25 Torres)</small>
-            </button>
+            <div class="menu-buttons">
+                <button class="btn-location" onclick="app.selectLocation('QUEIROZ')">
+                    <span class="loc-name">Queiroz</span>
+                    <span class="loc-city">Raposos - MG</span>
+                    <span class="loc-count">25 Torres</span>
+                </button>
 
-            <button class="btn-location" onclick="app.selectLocation('CUIABA')">
-                Cuiabá - Sabará
-                <small>(25 Torres)</small>
-            </button>
-            
-            <button class="btn-location" onclick="app.selectLocation('MSG')">
-                MSG - Crixás
-                <small>(07 Torres)</small>
-            </button>
-            
-            <button class="btn-location" onclick="app.selectLocation('CDS')">
-                CDS - Santa Bárbara
-                <small>(25 Torres)</small>
-            </button>
+                <button class="btn-location" onclick="app.selectLocation('CUIABA')">
+                    <span class="loc-name">Cuiabá</span>
+                    <span class="loc-city">Sabará - MG</span>
+                    <span class="loc-count">25 Torres</span>
+                </button>
+                
+                <button class="btn-location" onclick="app.selectLocation('MSG')">
+                    <span class="loc-name">MSG</span>
+                    <span class="loc-city">Crixás - GO</span>
+                    <span class="loc-count">07 Torres</span>
+                </button>
+                
+                <button class="btn-location" onclick="app.selectLocation('CDS')">
+                    <span class="loc-name">CDS</span>
+                    <span class="loc-city">Santa Bárbara - MG</span>
+                    <span class="loc-count">25 Torres</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -59,8 +68,13 @@
         </header>
 
         <div class="container">
-            <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre..." onkeyup="app.filterList()">
-            <div id="loading-msg" style="text-align:center; padding:20px; color:#666;">Carregando dados...</div>
+            <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre (Nome, Status, Falha)..." onkeyup="app.filterList()">
+            
+            <div id="loading-msg" style="text-align:center; padding:20px; color:#666;">
+                Carregando dados...<br>
+                <small>Aguarde a sincronização</small>
+            </div>
+
             <div id="tower-list" class="tower-list"></div>
         </div>
 
@@ -70,6 +84,7 @@
                     <h2 id="modal-title">Editar Torre</h2>
                     <span class="close" onclick="app.closeModal()">&times;</span>
                 </div>
+                
                 <form id="tower-form" onsubmit="app.saveTower(event)">
                     <input type="hidden" id="tower-id">
                     
@@ -87,35 +102,51 @@
 
                     <div class="form-section">
                         <h3>Informações Gerais</h3>
-                        <label>Localização</label> <input type="text" id="f-geral-local">
+                        <label>Localização (Setor/Área)</label> 
+                        <input type="text" id="f-geral-local">
+                        
                         <div class="two-col">
-                            <div><label>Prioridade</label><select id="f-geral-prio"><option value="Média">Média</option><option value="Alta">Alta</option><option value="Baixa">Baixa</option></select></div>
-                            <div><label>Técnico</label><input type="text" id="f-geral-tec"></div>
+                            <div>
+                                <label>Prioridade</label>
+                                <select id="f-geral-prio">
+                                    <option value="Baixa">Baixa</option>
+                                    <option value="Média">Média</option>
+                                    <option value="Alta">Alta</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Técnico Responsável</label>
+                                <input type="text" id="f-geral-tec">
+                            </div>
                         </div>
-                        <label>Última Comunicação</label> <input type="datetime-local" id="f-geral-ultimacom">
+                        <label>Última Comunicação</label> 
+                        <input type="datetime-local" id="f-geral-ultimacom">
                     </div>
 
                     <div class="form-section">
                         <h3>Falhas e Ações</h3>
-                        <label>Falha Detectada</label> <input type="text" id="f-falhas-detectada">
-                        <label>Histórico de Falha</label> <textarea id="f-falhas-historico" rows="2"></textarea>
-                        <label>Ação Requerida</label> <textarea id="f-falhas-acao" rows="3"></textarea>
+                        <label>Falha Detectada</label> 
+                        <input type="text" id="f-falhas-detectada" placeholder="Descreva a falha...">
+                        <label>Histórico de Falha</label> 
+                        <textarea id="f-falhas-historico" rows="2"></textarea>
+                        <label>Ação Requerida</label> 
+                        <textarea id="f-falhas-acao" rows="3"></textarea>
                     </div>
 
-                     <div class="form-section">
+                    <div class="form-section">
                         <h3>Manutenção</h3>
                         <div class="two-col">
                             <div><label>Última Manut.</label><input type="date" id="f-manu-ultima"></div>
                             <div><label>Próxima Manut.</label><input type="date" id="f-manu-proxima"></div>
                         </div>
-                        <label>Custo</label> <input type="text" id="f-manu-custo">
+                        <label>Custo Estimado</label> <input type="text" id="f-manu-custo">
                         <label>Peças Utilizadas</label> <input type="text" id="f-manu-pecas">
                     </div>
 
                     <div class="form-section warning-bg">
                         <h3>Pendências</h3>
-                        <label>Pend. Serviço</label> <input type="text" id="f-pend-servico">
-                        <label>Pend. Material</label> <input type="text" id="f-pend-material">
+                        <label>Pendência de Serviço</label> <input type="text" id="f-pend-servico">
+                        <label>Pendência de Material</label> <input type="text" id="f-pend-material">
                     </div>
 
                     <div class="form-section">
@@ -131,7 +162,7 @@
 
                     <div class="modal-actions sticky-footer">
                         <button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button>
-                        <button type="submit" class="btn-save">Salvar</button>
+                        <button type="submit" class="btn-save">Salvar Dados</button>
                     </div>
                 </form>
             </div>
