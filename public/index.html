@@ -2,55 +2,123 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gestão de Torres</title>
-
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
-
+    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon-192.png">
 
-    <script type="module" src="firebase.js"></script>
-    <script type="module" src="main.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
-
 <body>
 
-    <header>
-        <h1>Gestão de Torres</h1>
-        <button onclick="openAdd()">➕ Adicionar Torre</button>
-    </header>
+    <div id="login-screen" class="login-overlay">
+        <div class="login-box">
+            <h2>🔒 Acesso Restrito</h2>
+            <p>Sistema de Gestão de Torres</p>
+            <input type="password" id="login-pass" placeholder="Digite a senha (PIN)" pattern="[0-9]*" inputmode="numeric">
+            <button onclick="app.checkLogin()">Entrar</button>
+            <p id="login-msg" class="error-msg"></p>
+        </div>
+    </div>
 
-    <section id="list" class="list"></section>
+    <div id="app-content" style="display:none;">
+        <header>
+            <div class="header-top">
+                <h1>Painel de Torres <span id="connection-status" class="status-badge online">...</span></h1>
+            </div>
+            <div class="header-actions">
+                <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Relatório Geral</button>
+                <button class="btn-sync" onclick="app.syncNow()">🔄 Sync</button>
+            </div>
+        </header>
 
-    <!-- ============ MODAL ============ -->
-    <div id="modal" class="modal hidden">
-        <div class="modal-content">
-            <h2 id="modal-title">Nova Torre</h2>
+        <div class="container">
+            <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre..." onkeyup="app.filterList()">
+            <div id="tower-list" class="tower-list"></div>
+        </div>
 
-            <label>Nome</label>
-            <input id="mTorre">
+        <div id="modal" class="modal">
+            <div class="modal-content">
+                 <div class="modal-header">
+                    <h2 id="modal-title">Editar Torre</h2>
+                    <span class="close" onclick="app.closeModal()">&times;</span>
+                </div>
+                <form id="tower-form" onsubmit="app.saveTower(event)">
+                    <input type="hidden" id="tower-id">
+                    
+                    <div class="form-section">
+                        <h3>Principal</h3>
+                        <label>Nome da Torre</label>
+                        <input type="text" id="f-nome" required readonly class="readonly-input">
+                        <label>Status Operacional</label>
+                        <select id="f-status">
+                            <option value="Operando">Operando</option>
+                            <option value="Falha">Falha</option>
+                            <option value="Manutenção">Manutenção</option>
+                        </select>
+                    </div>
 
-            <label>Status</label>
-            <select id="mStatus">
-                <option value="Operando">Operando</option>
-                <option value="Falha">Falha</option>
-                <option value="Manutenção">Manutenção</option>
-            </select>
+                    <div class="form-section">
+                        <h3>Informações Gerais</h3>
+                        <label>Localização (CDS)</label> <input type="text" id="f-geral-local">
+                        <div class="two-col">
+                            <div><label>Prioridade</label><select id="f-geral-prio"><option value="Média">Média</option><option value="Alta">Alta</option><option value="Baixa">Baixa</option></select></div>
+                            <div><label>Técnico</label><input type="text" id="f-geral-tec"></div>
+                        </div>
+                        <label>Última Comunicação</label> <input type="datetime-local" id="f-geral-ultimacom">
+                    </div>
 
-            <label>Última Comunicação</label>
-            <input id="mCom" type="datetime-local">
+                    <div class="form-section">
+                        <h3>Falhas e Ações</h3>
+                        <label>Falha Detectada</label> <input type="text" id="f-falhas-detectada">
+                        <label>Histórico de Falha</label> <textarea id="f-falhas-historico" rows="2"></textarea>
+                        <label>Ação Requerida</label> <textarea id="f-falhas-acao" rows="3"></textarea>
+                    </div>
 
-            <label>Falha</label>
-            <input id="mFalha">
+                     <div class="form-section">
+                        <h3>Manutenção</h3>
+                        <div class="two-col">
+                            <div><label>Última Manut.</label><input type="date" id="f-manu-ultima"></div>
+                            <div><label>Próxima Manut.</label><input type="date" id="f-manu-proxima"></div>
+                        </div>
+                        <label>Custo</label> <input type="text" id="f-manu-custo">
+                        <label>Peças Utilizadas</label> <input type="text" id="f-manu-pecas">
+                    </div>
 
-            <div class="modal-actions">
-                <button onclick="closeModal()">Cancelar</button>
-                <button onclick="save()">Salvar</button>
+                    <div class="form-section warning-bg">
+                        <h3>Pendências</h3>
+                        <label>Pend. Serviço</label> <input type="text" id="f-pend-servico">
+                        <label>Pend. Material</label> <input type="text" id="f-pend-material">
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Fotos (Máx 3)</h3>
+                        <input type="file" id="image-input" accept="image/*" multiple onchange="app.handleImagePreview(event)">
+                        <div id="image-preview-container" class="image-preview-container"></div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Observações</h3>
+                        <textarea id="f-obs" rows="4"></textarea>
+                    </div>
+
+                    <div class="modal-actions sticky-footer">
+                        <button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button>
+                        <button type="submit" class="btn-save">Salvar e Sincronizar</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 
+    <script src="idb.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
