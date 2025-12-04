@@ -1,89 +1,94 @@
-/* --- CARDS EXPANDIDOS E ROBUSTOS --- */
-.tower-list { display: flex; flex-direction: column; gap: 1.5rem; }
-
-.card {
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-    overflow: hidden;
-    border: 1px solid #dee2e6;
-    border-left: 6px solid #ccc; /* Cor padrão */
+/* --- TELA DE SELEÇÃO DE LOCAL (ESTILO APP) --- */
+.login-overlay {
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%;
+    background-color: #e9ecef; /* Fundo cinza suave */
+    z-index: 9999;
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
-/* Cores da borda lateral baseadas no status */
-.card.st-Operando { border-left-color: #28a745; }
-.card.st-Falha { border-left-color: #dc3545; }
-.card.st-Manutenção { border-left-color: #ffc107; }
-
-.card-header {
-    padding: 0.8rem 1rem;
-    background: #f8f9fa;
-    display: flex; justify-content: space-between; align-items: center;
-    border-bottom: 1px solid #e9ecef;
-}
-.card-header strong { font-size: 1.2rem; color: #333; }
-
-/* Status Pill (Etiqueta colorida) */
-.status-pill { 
-    font-size: 0.75rem; padding: 4px 12px; border-radius: 20px; 
-    color: white; font-weight: bold; background: #6c757d; 
-}
-.st-Operando .status-pill { background-color: #28a745; }
-.st-Falha .status-pill { background-color: #dc3545; }
-.st-Manutenção .status-pill { background-color: #ffc107; color: #212529; }
-
-/* Alerta de Pendências */
-.warning-alert {
-    background-color: #fff3cd; color: #856404;
-    padding: 0.6rem 1rem; font-weight: bold; font-size: 0.9rem;
-    border-bottom: 1px solid #ffeeba; display: flex; align-items: center;
-}
-.warning-alert::before { content: "⚠️"; margin-right: 8px; }
-
-/* --- CORPO DO CARD (Onde ficam os dados) --- */
-.card-body { padding: 0.5rem 1rem; }
-
-/* Seções (Geral, Falhas, etc) com linha pontilhada */
-.data-section {
-    margin-bottom: 0.8rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px dashed #ced4da;
-}
-.data-section:last-child { border-bottom: none; margin-bottom: 0; }
-
-.section-title {
-    font-size: 0.75rem; text-transform: uppercase; 
-    color: #0056b3; font-weight: 800; margin-bottom: 6px;
-    letter-spacing: 0.5px;
+.login-box {
+    background: white; 
+    padding: 2rem; 
+    border-radius: 16px; /* Bordas mais arredondadas */
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1); /* Sombra suave */
+    width: 100%; 
+    max-width: 360px; 
+    text-align: center;
 }
 
-/* Linhas de informação (Label: Valor) */
-.info-row { 
-    display: flex; flex-wrap: wrap; 
-    margin-bottom: 4px; font-size: 0.95rem; line-height: 1.4;
-    align-items: baseline;
-}
-.info-label { 
-    font-weight: 700; color: #555; 
-    margin-right: 6px; min-width: 70px;
-}
-.info-value { color: #212529; }
-
-/* Destaque vermelho para falhas e pendências */
-.text-red { color: #dc3545; font-weight: bold; }
-
-/* Caixa de Observações */
-.obs-box {
-    background: #fdfdfe; border: 1px solid #eee; 
-    padding: 8px; border-radius: 4px; 
-    font-style: italic; font-size: 0.9rem; color: #555; margin-top: 5px;
+.menu-header h2 {
+    margin: 0 0 5px 0;
+    color: var(--primary);
+    font-size: 1.5rem;
 }
 
-/* Rodapé com botões */
-.card-footer {
-    padding: 0.8rem 1rem; background: #f1f3f5;
-    display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #e9ecef;
+.menu-header p {
+    margin: 0 0 20px 0;
+    color: #6c757d;
+    font-size: 0.9rem;
 }
-.btn-card { padding: 8px 20px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.9rem;}
-.btn-edit { background: #0056b3; color: white; }
-.btn-pdf-single { background: #6c757d; color: white; }
+
+.menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.btn-location {
+    width: 100%; 
+    padding: 12px 15px; 
+    background-color: white; 
+    border: 2px solid #e9ecef;
+    border-radius: 10px; 
+    cursor: pointer; 
+    transition: all 0.2s ease;
+    display: flex; 
+    flex-direction: column; 
+    align-items: flex-start; /* Alinha texto à esquerda */
+    position: relative;
+    text-align: left;
+}
+
+/* Hover e Active (Toque) */
+.btn-location:active, .btn-location:hover {
+    border-color: var(--primary);
+    background-color: #f8f9fa;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+
+.loc-name {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--primary);
+    display: block;
+}
+
+.loc-city {
+    font-size: 0.9rem;
+    color: #333;
+    margin-top: 2px;
+}
+
+.loc-count {
+    font-size: 0.75rem;
+    color: #fff;
+    background-color: #6c757d;
+    padding: 2px 8px;
+    border-radius: 10px;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    font-weight: bold;
+}
+
+/* Destaque para o botão ativo/clicado */
+.btn-location:active .loc-name { color: #003d80; }
