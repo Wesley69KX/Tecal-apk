@@ -23,18 +23,23 @@
             <h2>📍 Selecione a Unidade</h2>
             <p>Onde você vai trabalhar hoje?</p>
             
-            <button class="btn-location" onclick="app.selectLocation('CDS')">
-                CDS - Santa Bárbara
+            <button class="btn-location" onclick="app.selectLocation('QUEIROZ')">
+                Queiroz - Raposos
+                <small>(25 Torres)</small>
+            </button>
+
+            <button class="btn-location" onclick="app.selectLocation('CUIABA')">
+                Cuiabá - Raposos
                 <small>(25 Torres)</small>
             </button>
             
             <button class="btn-location" onclick="app.selectLocation('MSG')">
-                MSG - Sabará
+                MSG - Crixás
                 <small>(07 Torres)</small>
             </button>
             
-            <button class="btn-location" onclick="app.selectLocation('CUIABA')">
-                Cuiabá - Raposos
+            <button class="btn-location" onclick="app.selectLocation('CDS')">
+                CDS - Santa Bárbara
                 <small>(25 Torres)</small>
             </button>
         </div>
@@ -43,7 +48,7 @@
     <div id="app-content" style="display:none;">
         <header>
             <div class="header-top">
-                <h1><span id="current-loc-badge" class="loc-badge">CDS</span> Painel <span id="connection-status" class="status-badge online">...</span></h1>
+                <h1><span id="current-loc-badge" class="loc-badge">...</span> Painel <span id="connection-status" class="status-badge online">...</span></h1>
             </div>
             <div class="header-actions">
                 <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Geral</button>
