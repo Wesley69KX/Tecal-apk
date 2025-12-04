@@ -5,8 +5,8 @@ const app = {
     
 
     // Variáveis de Controle
-    currentLocation: "CDS", // Ex: 'CDS'
-    collectionName: "Torres CDS",  // Ex: 'towers_CDS'
+    currentLocation: "'QUEIROZ', 'CUIABA', 'MSG', 'CDS'", // Ex: 'CDS'
+    collectionName: "Torres CDS, Torres QUEIROZ, Torres CUIABA,  Torres MSG,  ",  // Ex: 'towers_CDS'
 
     // =================================================================
     // 1. COLE SUA LOGO AQUI (Obrigatório para não dar erro no PDF)
@@ -29,7 +29,7 @@ const app = {
  // --- SELEÇÃO DE LOCAL ---
     selectLocation(loc) {
         this.currentLocation = loc;
-        this.collectionName = `towers_${loc}`; // Define a coleção separada
+        this.collectionName = `towers_${loc}`; 
         
         document.getElementById('location-screen').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
@@ -45,7 +45,7 @@ const app = {
             this.db = firebase.firestore();
             await idb.open();
 
-            // OUVINTE EM TEMPO REAL DA COLEÇÃO ESPECÍFICA
+            // Listener da Coleção ESPECÍFICA
             this.db.collection(this.collectionName).onSnapshot((snapshot) => {
                 document.getElementById('loading-msg').style.display = 'none';
                 
@@ -56,11 +56,10 @@ const app = {
                     this.updateLocalBackup(cloudData);
                     this.renderList();
                 } else {
-                    // SE ESTIVER VAZIO (PRIMEIRA VEZ NO LOCAL), CRIA DADOS
                     this.checkDataIntegrity();
                 }
             }, (error) => {
-                console.log("Offline.");
+                console.log("Offline mode.");
                 this.loadFromLocal();
             });
 
@@ -76,13 +75,10 @@ const app = {
     },
 
     async checkDataIntegrity() {
-        // Verifica local
         const localData = await idb.getAll('towers');
         if (localData.length > 0) {
-            // Cuidado: aqui poderiam ser dados de outro local se o usuário trocou.
-            // Para simplificar, se a nuvem ta vazia, assumimos que precisa de Seed.
-            // O ideal seria limpar o IDB ao trocar de local (já fazemos no seedDatabase)
-            await this.seedDatabase();
+            this.towers = localData;
+            if(navigator.onLine) this.syncNow();
         } else {
             await this.seedDatabase(); 
         }
@@ -106,9 +102,9 @@ const app = {
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
         
-        // Define quantidade de torres por local
-        let totalTowers = 25; 
-        if (this.currentLocation === 'MSG') totalTowers = 7; 
+        // Define quantidade de torres
+        let totalTowers = 25; // Padrão (CDS, CUIABA, QUEIROZ)
+        if (this.currentLocation === 'MSG') totalTowers = 7; // MSG tem apenas 7
 
         this.towers = [];
 
@@ -128,7 +124,6 @@ const app = {
             this.towers.push(tower);
 
             if(batch) {
-                // Salva na coleção CERTA
                 const docRef = this.db.collection(this.collectionName).doc(String(i));
                 batch.set(docRef, tower);
             }
@@ -139,79 +134,6 @@ const app = {
         
         if(batch) await batch.commit();
         this.renderList();
-    },
-
-    // --- RENDERIZAÇÃO ROBUSTA (TODAS AS INFO) ---
-    renderList(list = this.towers) {
-        const container = document.getElementById('tower-list');
-        container.innerHTML = '';
-        if(!list || list.length === 0) {
-            container.innerHTML = '<p style="text-align:center; margin-top:20px;">Carregando ou sem dados...</p>';
-            return;
-        }
-        list.sort((a, b) => a.id - b.id);
-
-        list.forEach(t => {
-            const div = document.createElement('div');
-            div.className = `card st-${t.status.replace(' ','')}`;
-            
-            // Verifica pendências para o alerta visual
-            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
-                             (t.pendencias.servico && t.pendencias.servico.length > 1) || 
-                             (t.falhas.detectada && t.falhas.detectada.length > 1) ||
-                             t.status === "Falha";
-                             
-            const alertHTML = hasAlert ? `<div class="warning-alert">Pendências encontradas — verifique!</div>` : '';
-
-            // Helpers de formatação
-            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
-            const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
-            const val = (v) => (v && v.length > 0) ? v : '-';
-
-            // HTML COMPLETO DO CARD
-            div.innerHTML = `
-                <div class="card-header">
-                    <strong>🔔 ${t.nome}</strong>
-                    <span class="status-pill">${t.status}</span>
-                </div>
-                ${alertHTML}
-                <div class="card-body">
-                    <div class="data-section">
-                        <div class="section-title">Informações Gerais</div>
-                        <div class="info-row"><span class="info-label">Local:</span> <span class="info-value">${val(t.geral.localizacao)}</span></div>
-                        <div class="info-row"><span class="info-label">Técnico:</span> <span class="info-value">${val(t.geral.tecnico)}</span></div>
-                        <div class="info-row"><span class="info-label">Comunicação:</span> <span class="info-value">${fmtDateTime(t.geral.ultimaCom)}</span></div>
-                    </div>
-
-                    <div class="data-section">
-                        <div class="section-title">Falhas e Ações</div>
-                        <div class="info-row ${t.falhas.detectada ? 'text-red' : ''}"><span class="info-label">Detectada:</span> <span class="info-value">${val(t.falhas.detectada)}</span></div>
-                        <div class="info-row"><span class="info-label">Ação:</span> <span class="info-value">${val(t.falhas.acao)}</span></div>
-                    </div>
-
-                    <div class="data-section">
-                        <div class="section-title">Manutenção</div>
-                        <div class="info-row"><span class="info-label">Última:</span> <span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
-                        <div class="info-row"><span class="info-label">Peças:</span> <span class="info-value">${val(t.manutencao.pecas)}</span></div>
-                    </div>
-
-                    <div class="data-section">
-                        <div class="section-title">Pendências</div>
-                        <div class="info-row ${t.pendencias.servico ? 'text-red' : ''}"><span class="info-label">Serviço:</span> <span class="info-value">${val(t.pendencias.servico)}</span></div>
-                        <div class="info-row ${t.pendencias.material ? 'text-red' : ''}"><span class="info-label">Material:</span> <span class="info-value">${val(t.pendencias.material)}</span></div>
-                    </div>
-
-                    ${t.observacoes ? `<div class="obs-box">" ${t.observacoes} "</div>` : ''}
-                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; font-weight:bold; color:#0056b3">📷 ${t.fotos.length} fotos anexadas</div>` : ''}
-                </div>
-
-                <div class="card-footer">
-                    <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">📄 PDF</button>
-                    <button class="btn-card btn-edit" onclick="app.editTower(${t.id})">✏️ Editar</button>
-                </div>
-            `;
-            container.appendChild(div);
-        });
     },
 
     // --- SALVAR ---
@@ -253,10 +175,8 @@ const app = {
         // Salva Local
         await idb.put('towers', tower);
         
-        // Fecha Modal Instantaneamente
+        // UI Otimista
         this.closeModal();
-        
-        // Atualiza UI local
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
         this.renderList();
@@ -265,12 +185,65 @@ const app = {
         if (navigator.onLine && this.db) {
             try {
                 await this.db.collection(this.collectionName).doc(String(id)).set(tower);
-                console.log("Sincronizado.");
+                console.log("Sync OK.");
             } catch (error) { console.error(error); }
-        } else { console.log("Salvo offline."); }
+        } else { console.log("Offline."); }
     },
 
-    // --- PDF GERAL (CAPA DINÂMICA) ---
+    // --- RENDERIZAÇÃO ---
+    renderList(list = this.towers) {
+        const container = document.getElementById('tower-list');
+        container.innerHTML = '';
+        if(!list || list.length === 0) {
+            container.innerHTML = '<p style="text-align:center; margin-top:20px;">Carregando...</p>';
+            return;
+        }
+        list.sort((a, b) => a.id - b.id);
+
+        list.forEach(t => {
+            const div = document.createElement('div');
+            div.className = `card st-${t.status.replace(' ','')}`;
+            
+            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
+                             (t.pendencias.servico && t.pendencias.servico.length > 1) || 
+                             (t.falhas.detectada && t.falhas.detectada.length > 1) ||
+                             t.status === "Falha";
+                             
+            const alertHTML = hasAlert ? `<div class="warning-alert">Pendências encontradas — verifique!</div>` : '';
+            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
+            const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
+            const val = (v) => (v && v.length > 0) ? v : '-';
+
+            div.innerHTML = `
+                <div class="card-header">
+                    <strong>🔔 ${t.nome}</strong>
+                    <span class="status-pill">${t.status}</span>
+                </div>
+                ${alertHTML}
+                <div class="card-body">
+                    <div class="data-section">
+                        <div class="section-title">Informações Gerais</div>
+                        <div class="info-row"><span class="info-label">Local:</span> <span class="info-value">${val(t.geral.localizacao)}</span></div>
+                        <div class="info-row"><span class="info-label">Técnico:</span> <span class="info-value">${val(t.geral.tecnico)}</span></div>
+                        <div class="info-row"><span class="info-label">Comunicação:</span> <span class="info-value">${fmtDateTime(t.geral.ultimaCom)}</span></div>
+                    </div>
+                    <div class="data-section">
+                        <div class="section-title">Manutenção</div>
+                        <div class="info-row"><span class="info-label">Última:</span> <span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
+                        <div class="info-row"><span class="info-label">Falha:</span> <span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span></div>
+                    </div>
+                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; font-weight:bold; color:#0056b3">📷 ${t.fotos.length} fotos anexadas</div>` : ''}
+                </div>
+                <div class="card-footer">
+                    <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">📄 PDF</button>
+                    <button class="btn-card btn-edit" onclick="app.editTower(${t.id})">✏️ Editar</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    },
+
+    // --- PDF GERAL (SUBTÍTULO POR LOCAL) ---
     generateGlobalPDF() {
         if(!confirm(`Gerar relatório completo de ${this.currentLocation}?`)) return;
         const { jsPDF } = window.jspdf;
@@ -286,9 +259,11 @@ const app = {
         doc.setFontSize(16);
         doc.text("MINERAÇÃO ANGLOGOLD ASHANTI", 105, y, null, null, "center"); y+=10;
         
+        // CONFIGURAÇÃO DOS SUBTÍTULOS
         let subTitle = "– CDS – SANTA BÁRBARA – MG"; 
-        if(this.currentLocation === 'MSG') subTitle = "– MSG – SABARÁ – MG";
-        if(this.currentLocation === 'CUIABA') subTitle = "– CUIABÁ – RAPOSOS – MG";
+        if(this.currentLocation === 'MSG') subTitle = "– MSG – CRIXÁS – GO"; // Crixás
+        if(this.currentLocation === 'CUIABA') subTitle = "– CUIABÁ – RAPOSOS – MG"; // Raposos
+        if(this.currentLocation === 'QUEIROZ') subTitle = "– QUEIROZ – RAPOSOS – MG"; // Raposos
         
         doc.text(subTitle, 105, y, null, null, "center");
         
@@ -328,7 +303,6 @@ const app = {
                 if(k.includes('ultima') || k.includes('proxima')) {
                     try { if(v.includes('-')) val = new Date(v).toLocaleDateString('pt-BR'); } catch(e){}
                 }
-                if(y > 270) { doc.addPage(); y=30; }
                 doc.setFont("times", "bold"); doc.text(`${k.charAt(0).toUpperCase()+k.slice(1)}:`, 14, y);
                 doc.setFont("times", "normal"); 
                 doc.text(doc.splitTextToSize(val, 130), 60, y);
@@ -378,7 +352,7 @@ const app = {
         if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 75, 20, 60, 30); } catch (e) {}
         doc.setFont("times", "bold"); doc.setFontSize(18);
         doc.text("RELATÓRIO MENSAL", 105, 80, null, null, "center");
-        doc.text(`Período: ${input}`, 105, 100, null, null, "center");
+        doc.text(`Período: ${input} - ${this.currentLocation}`, 105, 100, null, null, "center");
         filtered.forEach((t, i) => { doc.addPage(); this.drawTowerPage(doc, t, i + 1, filtered.length); });
         doc.save(`Relatorio_Mensal_${mes}_${ano}.pdf`);
     },
