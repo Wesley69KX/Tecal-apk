@@ -11,17 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # Esta etapa instala as ferramentas do Firebase no computador do GitHub
       - name: Install Firebase Tools
         run: npm install -g firebase-tools
 
-      # Esta etapa faz o deploy usando a chave que você guardou
       - name: Deploy to Firebase
         uses: w9jds/firebase-action@master
         with:
+          # AQUI ESTÁ A CORREÇÃO: Adicionamos --project
           args: deploy --only hosting --project gestao-torres-v2
         env:
-          # ATENÇÃO: O nome aqui deve ser IGUAL ao que você criou no Passo 3
           GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GESTAO_TORRES }}
-          # Coloque o ID do seu projeto (veja na URL do console firebase: project/SEU-ID/...)
-          projectId: gestao-torres-v2
