@@ -6,6 +6,7 @@
     <title>Gestão de Torres</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
+    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon-192.png">
@@ -26,8 +27,8 @@
             </div>
             
             <div class="login-form">
-                <input type="text" id="login-user" placeholder="Usuário">
-                <input type="password" id="login-pass" placeholder="Senha">
+                <input type="text" id="login-user" placeholder="Usuário (Ex: TECALADM)">
+                <input type="password" id="login-pass" placeholder="Senha" inputmode="text">
                 <button class="btn-login-admin" onclick="app.checkLogin()">Entrar como Admin</button>
             </div>
 
@@ -44,10 +45,10 @@
                 <p>Onde você vai atuar hoje?</p>
             </div>
             <div class="menu-buttons">
-                <button class="btn-location" onclick="app.selectLocation('QUEIROZ')">Queiroz - Raposos<small>(25 Torres)</small></button>
-                <button class="btn-location" onclick="app.selectLocation('CUIABA')">Cuiabá - Sabará<small>(25 Torres)</small></button>
-                <button class="btn-location" onclick="app.selectLocation('MSG')">MSG - Crixás<small>(07 Torres)</small></button>
-                <button class="btn-location" onclick="app.selectLocation('CDS')">CDS - Santa Bárbara<small>(25 Torres)</small></button>
+                <button class="btn-location" onclick="app.selectLocation('QUEIROZ')"><span class="loc-name">Queiroz</span><span class="loc-city">Raposos - MG</span><span class="loc-count">25 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('CUIABA')"><span class="loc-name">Cuiabá</span><span class="loc-city">Sabará - MG</span><span class="loc-count">25 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('MSG')"><span class="loc-name">MSG</span><span class="loc-city">Crixás - GO</span><span class="loc-count">07 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('CDS')"><span class="loc-name">CDS</span><span class="loc-city">Santa Bárbara - MG</span><span class="loc-count">25 Torres</span></button>
             </div>
         </div>
     </div>
