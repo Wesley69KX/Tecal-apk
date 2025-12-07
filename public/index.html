@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gestão de Torres</title>
+    
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
     
@@ -22,15 +23,15 @@
     <div id="login-screen" class="login-overlay">
         <div class="login-box">
             <img id="login-logo-view" class="login-logo-img" alt="Logo" style="display:none;">
-            
+
             <div class="menu-header">
-                <h2>🔐 Acesso ao Sistema</h2>
+                <h2>🔐 Acesso Restrito</h2>
                 <p>Identifique-se para continuar</p>
             </div>
             
             <div class="login-form">
-                <input type="text" id="login-user" placeholder="Usuário">
-                <input type="password" id="login-pass" placeholder="Senha">
+                <input type="text" id="login-user" placeholder="Usuário (Ex: TECALADM)">
+                <input type="password" id="login-pass" placeholder="Senha" inputmode="text">
                 <button class="btn-login-admin" onclick="app.checkLogin()">Entrar como Admin</button>
             </div>
 
@@ -47,10 +48,29 @@
                 <p>Onde você vai atuar hoje?</p>
             </div>
             <div class="menu-buttons">
-                <button class="btn-location" onclick="app.selectLocation('QUEIROZ')"><span class="loc-name">Queiroz</span><span class="loc-city">Raposos - MG</span><span class="loc-count">25 Torres</span></button>
-                <button class="btn-location" onclick="app.selectLocation('CUIABA')"><span class="loc-name">Cuiabá</span><span class="loc-city">Sabará - MG</span><span class="loc-count">25 Torres</span></button>
-                <button class="btn-location" onclick="app.selectLocation('MSG')"><span class="loc-name">MSG</span><span class="loc-city">Crixás - GO</span><span class="loc-count">07 Torres</span></button>
-                <button class="btn-location" onclick="app.selectLocation('CDS')"><span class="loc-name">CDS</span><span class="loc-city">Santa Bárbara - MG</span><span class="loc-count">25 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('QUEIROZ')">
+                    <span class="loc-name">Queiroz</span>
+                    <span class="loc-city">Raposos - MG</span>
+                    <span class="loc-count">25 Torres</span>
+                </button>
+
+                <button class="btn-location" onclick="app.selectLocation('CUIABA')">
+                    <span class="loc-name">Cuiabá</span>
+                    <span class="loc-city">Sabará - MG</span>
+                    <span class="loc-count">25 Torres</span>
+                </button>
+                
+                <button class="btn-location" onclick="app.selectLocation('MSG')">
+                    <span class="loc-name">MSG</span>
+                    <span class="loc-city">Crixás - GO</span>
+                    <span class="loc-count">07 Torres</span>
+                </button>
+                
+                <button class="btn-location" onclick="app.selectLocation('CDS')">
+                    <span class="loc-name">CDS</span>
+                    <span class="loc-city">Santa Bárbara - MG</span>
+                    <span class="loc-count">25 Torres</span>
+                </button>
             </div>
         </div>
     </div>
@@ -61,7 +81,8 @@
                 <h1><span id="current-loc-badge" class="loc-badge">...</span> Painel <span id="connection-status" class="status-badge online">...</span></h1>
             </div>
             <div class="header-actions">
-                <button id="btn-new-checklist" class="btn-action btn-checklist" onclick="app.openChecklist()">📋 Checklist</button>
+                <button id="btn-new-checklist" class="btn-checklist" onclick="app.openChecklist()">📋 Checklist</button>
+                
                 <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Geral</button>
                 <button class="btn-month-pdf" onclick="app.generateMonthlyPDF()">📅 Mensal</button>
                 <button class="btn-sync" onclick="app.syncNow()">🔄</button>
@@ -82,6 +103,7 @@
             <h2>Checklist Manutenção</h2>
             <button onclick="app.generateChecklistPDF()" class="btn-save-check">Gerar PDF</button>
         </div>
+        
         <div class="checklist-content">
             <div class="check-section">
                 <h3>Dados Iniciais</h3>
@@ -98,11 +120,16 @@
                 </div>
                 <label>Executantes</label><input type="text" id="chk-executantes">
             </div>
+
             <div id="checklist-items-container"></div>
+
             <div class="check-section">
                 <h3>Finalização</h3>
-                <div class="signature-pad-wrapper"><canvas id="signature-pad"></canvas></div>
-                <button type="button" class="btn-clear-sig" onclick="app.clearSignature()">Limpar</button>
+                <div class="signature-pad-wrapper">
+                    <canvas id="signature-pad"></canvas>
+                </div>
+                <button type="button" class="btn-clear-sig" onclick="app.clearSignature()">Limpar Assinatura</button>
+                
                 <label style="margin-top:10px">Nome Legível</label><input type="text" id="chk-ass-nome">
                 <label>Matrícula</label><input type="text" id="chk-ass-mat">
             </div>
@@ -115,36 +142,66 @@
                 <h2 id="modal-title">Editar Torre</h2>
                 <span class="close" onclick="app.closeModal()">&times;</span>
             </div>
+            
             <form id="tower-form" onsubmit="app.saveTower(event)">
                 <input type="hidden" id="tower-id">
+                
                 <div class="form-section">
                     <h3>Principal</h3>
-                    <label>Nome</label><input type="text" id="f-nome" readonly class="readonly-input">
-                    <label>Status</label><select id="f-status"><option value="Operando">Operando</option><option value="Falha">Falha</option><option value="Manutenção">Manutenção</option></select>
+                    <label>Nome da Torre</label>
+                    <input type="text" id="f-nome" required readonly class="readonly-input">
+                    <label>Status Operacional</label>
+                    <select id="f-status">
+                        <option value="Operando">Operando</option>
+                        <option value="Falha">Falha</option>
+                        <option value="Manutenção">Manutenção</option>
+                    </select>
                 </div>
+
                 <div class="form-section">
-                    <h3>Geral</h3>
-                    <label>Local</label><input type="text" id="f-geral-local">
-                    <div class="two-col"><div><label>Prio</label><select id="f-geral-prio"><option>Média</option><option>Alta</option><option>Baixa</option></select></div><div><label>Tec</label><input type="text" id="f-geral-tec"></div></div>
-                    <label>Ult. Com.</label><input type="datetime-local" id="f-geral-ultimacom">
+                    <h3>Informações Gerais</h3>
+                    <label>Localização</label> <input type="text" id="f-geral-local">
+                    <div class="two-col">
+                        <div><label>Prioridade</label><select id="f-geral-prio"><option value="Baixa">Baixa</option><option value="Média">Média</option><option value="Alta">Alta</option></select></div>
+                        <div><label>Técnico</label><input type="text" id="f-geral-tec"></div>
+                    </div>
+                    <label>Última Comunicação</label> <input type="datetime-local" id="f-geral-ultimacom">
                 </div>
+
                 <div class="form-section">
-                    <h3>Falhas</h3>
-                    <label>Detectada</label><input type="text" id="f-falhas-detectada"><label>Histórico</label><textarea id="f-falhas-historico"></textarea><label>Ação</label><textarea id="f-falhas-acao"></textarea>
+                    <h3>Falhas e Ações</h3>
+                    <label>Falha Detectada</label> <input type="text" id="f-falhas-detectada">
+                    <label>Histórico de Falha</label> <textarea id="f-falhas-historico" rows="2"></textarea>
+                    <label>Ação Requerida</label> <textarea id="f-falhas-acao" rows="3"></textarea>
                 </div>
+
                  <div class="form-section">
                     <h3>Manutenção</h3>
-                    <div class="two-col"><div><label>Ultima</label><input type="date" id="f-manu-ultima"></div><div><label>Próxima</label><input type="date" id="f-manu-proxima"></div></div>
-                    <label>Custo</label><input type="text" id="f-manu-custo"><label>Peças</label><input type="text" id="f-manu-pecas">
+                    <div class="two-col">
+                        <div><label>Última Manut.</label><input type="date" id="f-manu-ultima"></div>
+                        <div><label>Próxima Manut.</label><input type="date" id="f-manu-proxima"></div>
+                    </div>
+                    <label>Custo</label> <input type="text" id="f-manu-custo">
+                    <label>Peças Utilizadas</label> <input type="text" id="f-manu-pecas">
                 </div>
+
                 <div class="form-section warning-bg">
                     <h3>Pendências</h3>
-                    <label>Serviço</label><input type="text" id="f-pend-servico"><label>Material</label><input type="text" id="f-pend-material">
+                    <label>Pend. Serviço</label> <input type="text" id="f-pend-servico">
+                    <label>Pend. Material</label> <input type="text" id="f-pend-material">
                 </div>
+
                 <div class="form-section">
-                    <h3>Fotos</h3><input type="file" id="image-input" multiple onchange="app.handleImagePreview(event)"><div id="image-preview-container" class="image-preview-container"></div>
+                    <h3>Fotos</h3>
+                    <input type="file" id="image-input" accept="image/*" multiple onchange="app.handleImagePreview(event)">
+                    <div id="image-preview-container" class="image-preview-container"></div>
                 </div>
-                <div class="form-section"><h3>Obs</h3><textarea id="f-obs"></textarea></div>
+
+                <div class="form-section">
+                    <h3>Observações</h3>
+                    <textarea id="f-obs" rows="4"></textarea>
+                </div>
+
                 <div class="modal-actions sticky-footer">
                     <button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button>
                     <button type="submit" class="btn-save">Salvar</button>
