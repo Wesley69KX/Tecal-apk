@@ -77,13 +77,23 @@ const app = {
     // 3. SISTEMA DE LOGIN E INICIALIZAÇÃO
     // =================================================================
     initApp() {
-        // Injeta a logo na tela de login se ela existir
+        // Recupera sessão se existir
+        const savedRole = sessionStorage.getItem('userRole');
+        if (savedRole) {
+            this.userRole = savedRole;
+            // Se já tem local, vai direto, senão tela de local
+            const savedLoc = sessionStorage.getItem('currentLocation');
+            if (savedLoc) {
+                this.selectLocation(savedLoc);
+            } else {
+                this.showLocationScreen();
+            }
+        }
+
+        // Exibe logo
         if(this.logoEmpresa && this.logoEmpresa.length > 100) {
             const img = document.getElementById('login-logo-view');
-            if(img) {
-                img.src = this.logoEmpresa;
-                img.style.display = 'block';
-            }
+            if(img) { img.src = this.logoEmpresa; img.style.display = 'block'; }
         }
     },
 
@@ -92,6 +102,7 @@ const app = {
         const p = document.getElementById('login-pass').value;
         if (u === this.adminUser && p === this.adminPass) {
             this.userRole = 'admin';
+            sessionStorage.setItem('userRole', 'admin');
             this.showLocationScreen();
         } else {
             alert("Login Inválido!");
@@ -100,6 +111,7 @@ const app = {
 
     visitorLogin() {
         this.userRole = 'visitor';
+        sessionStorage.setItem('userRole', 'visitor');
         this.showLocationScreen();
     },
 
@@ -115,10 +127,13 @@ const app = {
 
     selectLocation(loc) {
         this.currentLocation = loc;
-        this.collectionName = `towers_${loc}`; 
+        this.collectionName = `towers_${loc}`;
+        sessionStorage.setItem('currentLocation', loc);
+        
         document.getElementById('location-screen').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
         document.getElementById('current-loc-badge').innerText = loc;
+        
         this.init(); 
     },
 
@@ -140,7 +155,9 @@ const app = {
                     this.updateLocalBackup(cloudData);
                     this.renderList();
                 } else {
-                    this.checkDataIntegrity();
+                    // SE NUVEM VAZIA -> GERA DADOS
+                    console.log("Banco vazio, gerando dados...");
+                    this.seedDatabase();
                 }
             }, (error) => {
                 console.log("Modo Offline.");
@@ -150,7 +167,7 @@ const app = {
             });
 
         } catch (e) {
-            console.error("Erro init:", e);
+            console.error("Erro init (Verifique Chaves):", e);
             this.loadFromLocal();
         }
 
@@ -160,22 +177,15 @@ const app = {
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
     },
 
-    async checkDataIntegrity() {
-        const localData = await idb.getAll('towers');
-        if (localData.length > 0) {
-            this.towers = localData;
-            // Se for Admin e estiver online, sincroniza o que tem local
-            if(navigator.onLine && this.userRole === 'admin') this.syncNow();
-        } else {
-            await this.seedDatabase(); 
-        }
-        this.renderList();
-    },
-
+    // Carrega do LocalDB e SE VAZIO, CRIA
     async loadFromLocal() {
         document.getElementById('loading-msg').style.display = 'none';
         this.towers = await idb.getAll('towers');
-        if(this.towers.length === 0) await this.seedDatabase();
+        
+        if(this.towers.length === 0) {
+            console.log("Local vazio, criando seeds...");
+            await this.seedDatabase(); // GERAÇÃO FORÇADA
+        }
         this.renderList();
     },
 
@@ -206,19 +216,26 @@ const app = {
                 pendencias: { servico: "", material: "" },
                 observacoes: "", fotos: [], updatedAt: nowStr
             };
+            
             this.towers.push(tower);
 
+            // Salva na Nuvem apenas se for Admin e tiver conexão
             if(batch && this.userRole === 'admin') {
                 const docRef = this.db.collection(this.collectionName).doc(String(i));
                 batch.set(docRef, tower);
             }
         }
         
+        // Salva Localmente (Sempre)
         await idb.clear('towers');
         for(const t of this.towers) await idb.put('towers', t);
         
-        if(batch && this.userRole === 'admin') await batch.commit();
-        this.renderList();
+        // Commit na nuvem se possível
+        if(batch && this.userRole === 'admin') {
+            try { await batch.commit(); } catch(e) { console.log("Erro ao salvar seed na nuvem (offline?)"); }
+        }
+        
+        this.renderList(); // Atualiza a tela imediatamente
     },
 
     // =================================================================
@@ -227,7 +244,11 @@ const app = {
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
-        if(!list || list.length === 0) return;
+        
+        if(!list || list.length === 0) {
+            container.innerHTML = '<p style="text-align:center; padding:20px;">Nenhum dado. Recarregue a página.</p>';
+            return;
+        }
 
         list.sort((a, b) => a.id - b.id);
 
@@ -235,18 +256,23 @@ const app = {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
             
-            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
-                             (t.pendencias.servico && t.pendencias.servico.length > 1) || 
-                             (t.falhas.detectada && t.falhas.detectada.length > 1) ||
+            const hasAlert = (t.pendencias && ((t.pendencias.material && t.pendencias.material.length > 1) || 
+                             (t.pendencias.servico && t.pendencias.servico.length > 1))) || 
+                             (t.falhas && t.falhas.detectada && t.falhas.detectada.length > 1) ||
                              t.status === "Falha";
             
             const alertHTML = hasAlert ? `<div class="warning-alert">⚠️ Pendências encontradas</div>` : '';
 
-            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
-            const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '';
+            const fmtDate = (d) => (d && d.length > 5) ? new Date(d).toLocaleDateString('pt-BR') : '-';
+            const fmtTime = (d) => (d && d.length > 5) ? new Date(d).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '';
             const val = (v) => (v && v.length > 0) ? v : '-';
 
-            // Botão Editar (Só Admin)
+            // Garante objetos
+            const G = t.geral || {};
+            const M = t.manutencao || {};
+            const F = t.falhas || {};
+            const P = t.pendencias || {};
+
             const editBtn = (this.userRole === 'admin') 
                 ? `<button class="btn-card btn-edit" onclick="app.editTower(${t.id})">Editar</button>` 
                 : '';
@@ -259,22 +285,24 @@ const app = {
                 ${alertHTML}
                 <div class="card-body">
                     <div class="info-grid">
-                        <div class="info-item"><span class="info-label">Local:</span> <span class="info-value">${val(t.geral.localizacao)}</span></div>
-                        <div class="info-item"><span class="info-label">Técnico:</span> <span class="info-value">${val(t.geral.tecnico)}</span></div>
-                        <div class="info-item"><span class="info-label">Manut.:</span> <span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
-                        <div class="info-item"><span class="info-label">Comun.:</span> <span class="info-value">${fmtDateTime(t.geral.ultimaCom)}</span></div>
+                        <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(G.localizacao)}</span></div>
+                        <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(G.tecnico)}</span></div>
+                        <div class="info-item"><span class="info-label">Manut.:</span><span class="info-value">${fmtDate(M.ultima)}</span></div>
+                        <div class="info-item"><span class="info-label">Comun.:</span><span class="info-value">${fmtDate(G.ultimaCom)} ${fmtTime(G.ultimaCom)}</span></div>
                         
                         <div class="divider"></div>
                         
                         <div class="info-item" style="grid-column: 1 / -1;">
-                            <span class="info-label">Falha:</span> <span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span>
+                            <span class="info-label">Falha Detectada:</span> 
+                            <span class="info-value ${F.detectada ? 'text-red' : ''}">${val(F.detectada)}</span>
                         </div>
                          <div class="info-item" style="grid-column: 1 / -1;">
-                            <span class="info-label">Material:</span> <span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span>
+                            <span class="info-label">Material Pendente:</span> 
+                            <span class="info-value ${P.material ? 'text-red' : ''}">${val(P.material)}</span>
                         </div>
                     </div>
                     ${t.observacoes ? `<div class="obs-box">"${t.observacoes}"</div>` : ''}
-                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; color:blue; font-weight:bold">📷 ${t.fotos.length} fotos</div>` : ''}
+                    ${t.fotos && t.fotos.length > 0 ? `<div style="margin-top:10px; color:blue; font-weight:bold">📷 ${t.fotos.length} fotos</div>` : ''}
                 </div>
                 <div class="card-footer">
                     <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">PDF</button>
@@ -321,13 +349,16 @@ const app = {
             updatedAt: new Date().toISOString()
         };
 
+        // Salva Local
         await idb.put('towers', tower);
         this.closeModal();
         
+        // Atualiza UI
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
         this.renderList();
 
+        // Envia Nuvem
         if (navigator.onLine && this.db) {
             try { await this.db.collection(this.collectionName).doc(String(id)).set(tower); }
             catch (error) { console.error(error); }
@@ -335,8 +366,9 @@ const app = {
     },
 
     // =================================================================
-    // 5. RELATÓRIOS (SMART LOGO)
+    // 5. RELATÓRIOS E CHECKLIST
     // =================================================================
+    
     async drawSmartLogo(doc, base64, x, y, maxW, maxH) {
         if (!base64 || base64.length < 100) return;
         return new Promise((resolve) => {
@@ -415,7 +447,6 @@ const app = {
         doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 15, null, null, "right");
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 20, null, null, "right");
         doc.setDrawColor(0); doc.line(14, 28, 196, 28);
-        
         let y = 40; doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
         doc.text(`Detalhes: ${t.nome}`, 105, y, null, null, "center"); y += 15;
         
@@ -431,9 +462,13 @@ const app = {
             });
             y += 5;
         };
-        drawSection("Geral", t.geral); drawSection("Falhas", t.falhas); drawSection("Manutenção", t.manutencao); drawSection("Pendências", t.pendencias);
+        drawSection("Geral", t.geral || {}); 
+        drawSection("Falhas", t.falhas || {}); 
+        drawSection("Manutenção", t.manutencao || {}); 
+        drawSection("Pendências", t.pendencias || {});
+        
         if(t.observacoes) { doc.setFont("times", "bold"); doc.text("Observações", 14, y); y+=6; doc.setFont("times", "italic"); doc.text(doc.splitTextToSize(t.observacoes, 180), 14, y); }
-        if(t.fotos.length > 0) {
+        if(t.fotos && t.fotos.length > 0) {
             doc.addPage(); y=30; 
             await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
             doc.setFont("times", "bold"); doc.text("Registro Fotográfico", 105, y, null, null, "center"); y+=15;
@@ -456,10 +491,12 @@ const app = {
         if(this.userRole !== 'admin') return alert("Acesso Restrito!");
         document.getElementById('checklist-screen').style.display = 'flex';
         this.renderChecklistForm(); this.setupSignaturePad();
+        document.getElementById('chk-data').valueAsDate = new Date();
+        document.getElementById('chk-hora-inicio').value = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         
-        const now = new Date();
-        document.getElementById('chk-data').valueAsDate = now;
-        document.getElementById('chk-hora-inicio').value = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        // Define hora fim sugerida
+        const end = new Date(); end.setMinutes(end.getMinutes() + 30);
+        document.getElementById('chk-hora-fim').value = end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     },
 
     closeChecklist() { document.getElementById('checklist-screen').style.display = 'none'; },
@@ -539,12 +576,13 @@ const app = {
         this.tempPhotos = [...t.fotos] || [];
         document.getElementById('tower-form').reset();
         document.getElementById('image-preview-container').innerHTML = '';
+        // Preencher IDs...
         document.getElementById('tower-id').value = t.id; document.getElementById('f-nome').value = t.nome; document.getElementById('f-status').value = t.status;
-        document.getElementById('f-geral-local').value = t.geral.localizacao; document.getElementById('f-geral-prio').value = t.geral.prioridade; document.getElementById('f-geral-tec').value = t.geral.tecnico; document.getElementById('f-geral-ultimacom').value = t.geral.ultimaCom;
-        document.getElementById('f-falhas-detectada').value = t.falhas.detectada; document.getElementById('f-falhas-historico').value = t.falhas.historico; document.getElementById('f-falhas-acao').value = t.falhas.acao;
-        document.getElementById('f-manu-ultima').value = t.manutencao.ultima; document.getElementById('f-manu-proxima').value = t.manutencao.proxima; document.getElementById('f-manu-custo').value = t.manutencao.custo; document.getElementById('f-manu-pecas').value = t.manutencao.pecas;
-        document.getElementById('f-pend-servico').value = t.pendencias.servico; document.getElementById('f-pend-material').value = t.pendencias.material;
-        document.getElementById('f-obs').value = t.observacoes;
+        document.getElementById('f-geral-local').value = t.geral ? t.geral.localizacao : ''; document.getElementById('f-geral-prio').value = t.geral ? t.geral.prioridade : 'Média'; document.getElementById('f-geral-tec').value = t.geral ? t.geral.tecnico : ''; document.getElementById('f-geral-ultimacom').value = t.geral ? t.geral.ultimaCom : '';
+        document.getElementById('f-falhas-detectada').value = t.falhas ? t.falhas.detectada : ''; document.getElementById('f-falhas-historico').value = t.falhas ? t.falhas.historico : ''; document.getElementById('f-falhas-acao').value = t.falhas ? t.falhas.acao : '';
+        document.getElementById('f-manu-ultima').value = t.manutencao ? t.manutencao.ultima : ''; document.getElementById('f-manu-proxima').value = t.manutencao ? t.manutencao.proxima : ''; document.getElementById('f-manu-custo').value = t.manutencao ? t.manutencao.custo : ''; document.getElementById('f-manu-pecas').value = t.manutencao ? t.manutencao.pecas : '';
+        document.getElementById('f-pend-servico').value = t.pendencias ? t.pendencias.servico : ''; document.getElementById('f-pend-material').value = t.pendencias ? t.pendencias.material : '';
+        document.getElementById('f-obs').value = t.observacoes || '';
         this.renderImagePreviews(); document.getElementById('modal').style.display = 'block';
     },
     handleImagePreview(e) { Array.from(e.target.files).forEach(file => { this.resizeImage(file, 1280, 1280, (b64) => { this.tempPhotos.push(b64); this.renderImagePreviews(); }); }); },
@@ -555,4 +593,5 @@ const app = {
     updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; }
 };
 
+window.onload = () => app.initApp();
 window.onload = () => app.initApp();
