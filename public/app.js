@@ -80,7 +80,7 @@ const app = {
     // 3. SISTEMA DE LOGIN E INICIALIZAÇÃO
     // =================================================================
     initApp() {
-        // Exibe logo na tela de login se existir
+        // Injeta a logo na tela de login se ela existir
         if(this.logoEmpresa && this.logoEmpresa.length > 100) {
             const img = document.getElementById('login-logo-view');
             if(img) {
@@ -94,12 +94,16 @@ const app = {
         const u = document.getElementById('login-user').value;
         const p = document.getElementById('login-pass').value;
         if (u === this.adminUser && p === this.adminPass) {
-            this.userRole = 'admin'; this.showLocationScreen();
-        } else { alert("Login Inválido!"); }
+            this.userRole = 'admin';
+            this.showLocationScreen();
+        } else {
+            alert("Login Inválido!");
+        }
     },
 
     visitorLogin() {
-        this.userRole = 'visitor'; this.showLocationScreen();
+        this.userRole = 'visitor';
+        this.showLocationScreen();
     },
 
     showLocationScreen() {
@@ -142,7 +146,7 @@ const app = {
                     this.checkDataIntegrity();
                 }
             }, (error) => {
-                console.log("Offline.");
+                console.log("Modo Offline.");
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 this.loadFromLocal();
@@ -221,15 +225,13 @@ const app = {
     },
 
     // =================================================================
-    // 4. RENDERIZAÇÃO (CARDS EXPANDIDOS/ROBUSTOS)
+    // 4. RENDERIZAÇÃO (CARDS ABERTOS/COMPLETOS)
     // =================================================================
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
-        if(!list || list.length === 0) {
-            container.innerHTML = '<p style="text-align:center; margin-top:20px; color:#666;">Carregando...</p>';
-            return;
-        }
+        if(!list || list.length === 0) return;
+
         list.sort((a, b) => a.id - b.id);
 
         list.forEach(t => {
@@ -241,7 +243,7 @@ const app = {
                              (t.falhas.detectada && t.falhas.detectada.length > 1) ||
                              t.status === "Falha";
             
-            const alertHTML = hasAlert ? `<div class="warning-alert">⚠️ Pendências encontradas — verifique!</div>` : '';
+            const alertHTML = hasAlert ? `<div class="warning-alert">⚠️ Pendências encontradas</div>` : '';
 
             const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
             const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '';
@@ -249,13 +251,13 @@ const app = {
 
             // Botão Editar (Só Admin)
             const editBtn = (this.userRole === 'admin') 
-                ? `<button class="btn-card btn-edit" onclick="app.editTower(${t.id})">✏️ Editar</button>` 
+                ? `<button class="btn-card btn-edit" onclick="app.editTower(${t.id})">Editar</button>` 
                 : '';
 
             div.innerHTML = `
                 <div class="card-header">
-                    <div class="card-title">🗼 ${t.nome}</div>
-                    <div class="card-status">${t.status}</div>
+                    <strong>🔔 ${t.nome}</strong>
+                    <span class="status-pill">${t.status}</span>
                 </div>
                 ${alertHTML}
                 <div class="card-body">
@@ -263,18 +265,24 @@ const app = {
                         <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(t.geral.localizacao)}</span></div>
                         <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(t.geral.tecnico)}</span></div>
                         <div class="info-item"><span class="info-label">Última Manut.</span><span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
-                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDate(t.geral.ultimaCom)} ${fmtTime(t.geral.ultimaCom)}</span></div>
+                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDateTime(t.geral.ultimaCom)}</span></div>
                         
                         <div class="divider"></div>
                         
-                        <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Falha Detectada</span><span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span></div>
-                        <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Pendência Material</span><span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span></div>
+                        <div class="info-item" style="grid-column: 1 / -1;">
+                            <span class="info-label">Falha Detectada:</span> 
+                            <span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span>
+                        </div>
+                         <div class="info-item" style="grid-column: 1 / -1;">
+                            <span class="info-label">Material Pendente:</span> 
+                            <span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span>
+                        </div>
                     </div>
-                    ${t.observacoes ? `<div class="obs-text">"${t.observacoes}"</div>` : ''}
-                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; font-size:0.85rem; color:#0056b3; font-weight:bold;">📷 ${t.fotos.length} fotos anexadas</div>` : ''}
+                    ${t.observacoes ? `<div class="obs-box">"${t.observacoes}"</div>` : ''}
+                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; color:blue; font-weight:bold">📷 ${t.fotos.length} fotos</div>` : ''}
                 </div>
                 <div class="card-footer">
-                    <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">📄 PDF</button>
+                    <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">PDF</button>
                     ${editBtn}
                 </div>
             `;
@@ -332,10 +340,8 @@ const app = {
     },
 
     // =================================================================
-    // 5. RELATÓRIOS E CHECKLIST
+    // 5. RELATÓRIOS (SMART LOGO)
     // =================================================================
-    
-    // Função "Smart Logo" (Ajusta tamanho sem esticar)
     async drawSmartLogo(doc, base64, x, y, maxW, maxH) {
         if (!base64 || base64.length < 100) return;
         return new Promise((resolve) => {
@@ -350,7 +356,6 @@ const app = {
         });
     },
 
-    // PDF Geral
     async generateGlobalPDF() {
         if(!confirm(`Gerar relatório completo de ${this.currentLocation}?`)) return;
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
@@ -384,7 +389,6 @@ const app = {
         doc.save(`Relatorio_${this.currentLocation}_${new Date().toISOString().slice(0,10)}.pdf`);
     },
 
-    // PDF Mensal
     async generateMonthlyPDF() {
         const input = prompt("Mês/Ano (ex: 12/2025):"); if (!input) return;
         const [mes, ano] = input.split('/'); if (!mes || !ano) return alert("Erro no formato.");
@@ -408,7 +412,6 @@ const app = {
         doc.save(`Relatorio_Mensal_${mes}_${ano}.pdf`);
     },
 
-    // Página Individual
     async drawTowerPage(doc, t, pageNumber, totalPages) {
         doc.setFont("times", "roman");
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
@@ -417,7 +420,6 @@ const app = {
         doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 15, null, null, "right");
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 20, null, null, "right");
         doc.setDrawColor(0); doc.line(14, 28, 196, 28);
-        
         let y = 40; doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
         doc.text(`Detalhes: ${t.nome}`, 105, y, null, null, "center"); y += 15;
         
@@ -453,11 +455,50 @@ const app = {
         await this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`); 
     },
 
-    // --- CHECKLIST PDF ---
-    async generateChecklistPDF() {
-        if(!confirm("Gerar PDF do Checklist?")) return;
-        const { jsPDF } = window.jspdf; const doc = new jsPDF();
+    // --- CHECKLIST ---
+    openChecklist() { 
+        if(this.userRole !== 'admin') return alert("Acesso Restrito!");
+        document.getElementById('checklist-screen').style.display = 'flex';
+        this.renderChecklistForm(); this.setupSignaturePad();
         
+        const now = new Date();
+        document.getElementById('chk-data').valueAsDate = now;
+        document.getElementById('chk-hora-inicio').value = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const end = new Date(now); end.setMinutes(end.getMinutes() + 30);
+        document.getElementById('chk-hora-fim').value = end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    },
+
+    closeChecklist() { document.getElementById('checklist-screen').style.display = 'none'; },
+
+    renderChecklistForm() {
+        const container = document.getElementById('checklist-items-container'); container.innerHTML = '';
+        let currentGroup = '';
+        this.checklistItemsData.forEach(item => {
+            if (item.group !== currentGroup) { currentGroup = item.group; container.innerHTML += `<div class="check-section"><h3>${currentGroup}</h3></div>`; }
+            const section = container.lastElementChild;
+            const row = document.createElement('div'); row.className = 'chk-row';
+            row.innerHTML = `<div class="chk-title">${item.id} - ${item.text}</div><div class="chk-controls"><div class="radio-group"><label class="radio-label"><input type="radio" name="status_${item.id}" value="OK" checked> OK</label><label class="radio-label"><input type="radio" name="status_${item.id}" value="NOK"> NOK</label><label class="radio-label"><input type="radio" name="status_${item.id}" value="NA"> N/A</label></div></div><input type="text" class="chk-comment" id="comment_${item.id}" placeholder="Comentários...">`;
+            section.appendChild(row);
+        });
+    },
+
+    setupSignaturePad() {
+        const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d');
+        const wrapper = document.querySelector('.signature-pad-wrapper'); canvas.width = wrapper.offsetWidth; canvas.height = wrapper.offsetHeight;
+        ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
+        const startDraw = (e) => { this.isDrawing = true; ctx.beginPath(); const { offsetX, offsetY } = this.getPos(e, canvas); ctx.moveTo(offsetX, offsetY); };
+        const draw = (e) => { if (!this.isDrawing) return; const { offsetX, offsetY } = this.getPos(e, canvas); ctx.lineTo(offsetX, offsetY); ctx.stroke(); };
+        const stopDraw = () => { this.isDrawing = false; };
+        canvas.onmousedown = startDraw; canvas.onmousemove = draw; canvas.onmouseup = stopDraw;
+        canvas.ontouchstart = (e) => { e.preventDefault(); startDraw(e); }; canvas.ontouchmove = (e) => { e.preventDefault(); draw(e); }; canvas.ontouchend = stopDraw;
+    },
+    getPos(e, canvas) { if (e.touches && e.touches.length > 0) { const rect = canvas.getBoundingClientRect(); return { offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top }; } return { offsetX: e.offsetX, offsetY: e.offsetY }; },
+    clearSignature() { const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); },
+
+    async generateChecklistPDF() {
+        if(!confirm("Gerar PDF?")) return;
+        const { jsPDF } = window.jspdf; const doc = new jsPDF();
+
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         await this.drawSmartLogo(doc, this.logoCliente, 166, 10, 30, 15);
 
@@ -487,12 +528,8 @@ const app = {
             const comment = document.getElementById(`comment_${item.id}`).value;
             tableBody.push([item.id, item.text, status, comment]);
         });
-        doc.autoTable({
-            startY: 60, head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], body: tableBody, theme: 'grid',
-            headStyles: { fillColor: [0, 86, 179], textColor: 255 }, styles: { fontSize: 8, cellPadding: 2 },
-            didParseCell: function(data) { if (data.section === 'body' && data.column.index === 2) { if (data.cell.raw === 'NOK') data.cell.styles.textColor = [200, 0, 0]; if (data.cell.raw === 'OK') data.cell.styles.textColor = [0, 100, 0]; } }
-        });
-
+        doc.autoTable({ startY: 60, head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], body: tableBody, theme: 'grid', headStyles: { fillColor: [0, 86, 179], textColor: 255 }, styles: { fontSize: 8, cellPadding: 2 }, didParseCell: function(data) { if (data.section === 'body' && data.column.index === 2) { if (data.cell.raw === 'NOK') data.cell.styles.textColor = [200, 0, 0]; if (data.cell.raw === 'OK') data.cell.styles.textColor = [0, 100, 0]; } } });
+        
         let finalY = doc.lastAutoTable.finalY + 20; if(finalY > 250) { doc.addPage(); finalY = 40; }
         doc.text("Responsável Técnico (TECAL):", 14, finalY);
         doc.text(document.getElementById('chk-ass-nome').value, 14, finalY + 7);
@@ -500,38 +537,7 @@ const app = {
         doc.save(`Checklist_${this.currentLocation}_${data}.pdf`);
     },
 
-    // --- UTILS (MODAL, FOTO, ASSINATURA) ---
-    openChecklist() { 
-        if(this.userRole !== 'admin') return alert("Acesso Restrito!");
-        document.getElementById('checklist-screen').style.display = 'flex';
-        this.renderChecklistForm(); this.setupSignaturePad();
-        document.getElementById('chk-data').valueAsDate = new Date();
-    },
-    closeChecklist() { document.getElementById('checklist-screen').style.display = 'none'; },
-    renderChecklistForm() {
-        const container = document.getElementById('checklist-items-container'); container.innerHTML = '';
-        let currentGroup = '';
-        this.checklistItemsData.forEach(item => {
-            if (item.group !== currentGroup) { currentGroup = item.group; container.innerHTML += `<div class="check-section"><h3>${currentGroup}</h3></div>`; }
-            const section = container.lastElementChild;
-            const row = document.createElement('div'); row.className = 'chk-row';
-            row.innerHTML = `<div class="chk-title">${item.id} - ${item.text}</div><div class="chk-controls"><div class="radio-group"><label class="radio-label"><input type="radio" name="status_${item.id}" value="OK" checked> OK</label><label class="radio-label"><input type="radio" name="status_${item.id}" value="NOK"> NOK</label><label class="radio-label"><input type="radio" name="status_${item.id}" value="NA"> N/A</label></div></div><input type="text" class="chk-comment" id="comment_${item.id}" placeholder="Comentários...">`;
-            section.appendChild(row);
-        });
-    },
-    setupSignaturePad() {
-        const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d');
-        const wrapper = document.querySelector('.signature-pad-wrapper'); canvas.width = wrapper.offsetWidth; canvas.height = wrapper.offsetHeight;
-        ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
-        const startDraw = (e) => { this.isDrawing = true; ctx.beginPath(); const { offsetX, offsetY } = this.getPos(e, canvas); ctx.moveTo(offsetX, offsetY); };
-        const draw = (e) => { if (!this.isDrawing) return; const { offsetX, offsetY } = this.getPos(e, canvas); ctx.lineTo(offsetX, offsetY); ctx.stroke(); };
-        const stopDraw = () => { this.isDrawing = false; };
-        canvas.onmousedown = startDraw; canvas.onmousemove = draw; canvas.onmouseup = stopDraw;
-        canvas.ontouchstart = (e) => { e.preventDefault(); startDraw(e); }; canvas.ontouchmove = (e) => { e.preventDefault(); draw(e); }; canvas.ontouchend = stopDraw;
-    },
-    getPos(e, canvas) { if (e.touches && e.touches.length > 0) { const rect = canvas.getBoundingClientRect(); return { offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top }; } return { offsetX: e.offsetX, offsetY: e.offsetY }; },
-    clearSignature() { const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); },
-
+    // --- UTILS ---
     filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
     closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
     editTower(id) { 
