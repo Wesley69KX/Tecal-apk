@@ -10,9 +10,6 @@ const app = {
     
     // --- CHECKLIST ---
     signaturePad: null, isDrawing: false,
-    // Variáveis de Controle
-    currentLocation: "'QUEIROZ', 'CUIABA', 'MSG', 'CDS'", // Ex: 'CDS'
-    collectionName: "Torres CDS, Torres QUEIROZ, Torres CUIABA,  Torres MSG,  ",  // Ex: 'towers_CDS'
 
     // =================================================================
     // 1. COLE SUA LOGO AQUI (Obrigatório para não dar erro no PDF)
@@ -203,7 +200,7 @@ const app = {
                 id: i,
                 nome: `ER ${idStr}`,
                 status: "Operando",
-                geral: { localizacao: this.currentLocation, prioridade: "Média", tecnico: "", ultimaCom: "" },
+                geral: { localizacao: "", prioridade: "Média", tecnico: "", ultimaCom: "" },
                 falhas: { detectada: "", historico: "", acao: "" },
                 manutencao: { ultima: "", custo: "", pecas: "", proxima: "" },
                 pendencias: { servico: "", material: "" },
@@ -262,20 +259,18 @@ const app = {
                 ${alertHTML}
                 <div class="card-body">
                     <div class="info-grid">
-                        <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(t.geral.localizacao)}</span></div>
-                        <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(t.geral.tecnico)}</span></div>
-                        <div class="info-item"><span class="info-label">Última Manut.</span><span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
-                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDateTime(t.geral.ultimaCom)}</span></div>
+                        <div class="info-item"><span class="info-label">Local:</span> <span class="info-value">${val(t.geral.localizacao)}</span></div>
+                        <div class="info-item"><span class="info-label">Técnico:</span> <span class="info-value">${val(t.geral.tecnico)}</span></div>
+                        <div class="info-item"><span class="info-label">Manut.:</span> <span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
+                        <div class="info-item"><span class="info-label">Comun.:</span> <span class="info-value">${fmtDateTime(t.geral.ultimaCom)}</span></div>
                         
                         <div class="divider"></div>
                         
                         <div class="info-item" style="grid-column: 1 / -1;">
-                            <span class="info-label">Falha Detectada:</span> 
-                            <span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span>
+                            <span class="info-label">Falha:</span> <span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span>
                         </div>
                          <div class="info-item" style="grid-column: 1 / -1;">
-                            <span class="info-label">Material Pendente:</span> 
-                            <span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span>
+                            <span class="info-label">Material:</span> <span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span>
                         </div>
                     </div>
                     ${t.observacoes ? `<div class="obs-box">"${t.observacoes}"</div>` : ''}
@@ -420,6 +415,7 @@ const app = {
         doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 15, null, null, "right");
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 20, null, null, "right");
         doc.setDrawColor(0); doc.line(14, 28, 196, 28);
+        
         let y = 40; doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
         doc.text(`Detalhes: ${t.nome}`, 105, y, null, null, "center"); y += 15;
         
@@ -464,8 +460,6 @@ const app = {
         const now = new Date();
         document.getElementById('chk-data').valueAsDate = now;
         document.getElementById('chk-hora-inicio').value = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        const end = new Date(now); end.setMinutes(end.getMinutes() + 30);
-        document.getElementById('chk-hora-fim').value = end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     },
 
     closeChecklist() { document.getElementById('checklist-screen').style.display = 'none'; },
