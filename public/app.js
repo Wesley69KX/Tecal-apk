@@ -531,7 +531,7 @@ const app = {
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
 
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
-        await this.drawSmartLogo(doc, this.logoCliente, 166, 10, 30, 15);
+        await this.drawSmartLogo(doc, this.logoCliente, 146, 10, 50, 25);
 
         doc.setFontSize(8); doc.setTextColor(0); doc.text("SOLUÇÕES EM TECNOLOGIA", 14, 30);
         doc.setFont("helvetica", "bold"); doc.setFontSize(10);
