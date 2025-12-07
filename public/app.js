@@ -1,8 +1,14 @@
 const app = {
+    // VARIÁVEIS DE ESTADO
     towers: [],
     tempPhotos: [],
     db: null,
+    currentLocation: "", // 'QUEIROZ', 'CUIABA', 'MSG', 'CDS'
+    collectionName: "",  // ex: 'towers_CDS'
     
+    // VARIÁVEIS DO CHECKLIST
+    signaturePad: null,
+    isDrawing: false,
 
     // Variáveis de Controle
     currentLocation: "'QUEIROZ', 'CUIABA', 'MSG', 'CDS'", // Ex: 'CDS'
@@ -26,7 +32,55 @@ const app = {
         measurementId: "G-LJD922VTQ4"
     },
 
-// --- SELEÇÃO DE LOCAL ---
+// =================================================================
+    // 2. DADOS DO CHECKLIST (BASEADO NO SEU PDF)
+    // =================================================================
+    checklistItemsData: [
+        {id: "1.1", group: "Etapas Iniciais", text: "Comunicar ao CMG sobre início das atividades"},
+        {id: "1.2", group: "Etapas Iniciais", text: "Abaixar o volume das remotas"},
+        {id: "2.1", group: "Acesso", text: "Acesso nas proximidades do ponto"},
+        {id: "2.2", group: "Acesso", text: "Acessos durante translado e percurso"},
+        {id: "2.3", group: "Acesso", text: "Área para estacionamento seguro"},
+        {id: "2.4", group: "Acesso", text: "Condições do solo/terreno (valas, buracos)"},
+        {id: "3.1", group: "Painel Interno", text: "Insetos/mofo"},
+        {id: "3.2", group: "Painel Interno", text: "Conexões elétricas"},
+        {id: "3.3", group: "Painel Interno", text: "Vedação das portas"},
+        {id: "3.4", group: "Painel Interno", text: "Fixação dos componentes"},
+        {id: "3.5", group: "Painel Interno", text: "Verificação dos LEDs (rádios)"},
+        {id: "3.6", group: "Painel Interno", text: "Conexões de comunicação dos rádios"},
+        {id: "4.1", group: "Visual Exterior", text: "Verificação de pontos de corrosão"},
+        {id: "4.2", group: "Visual Exterior", text: "Condição de limpeza do site"},
+        {id: "4.3", group: "Visual Exterior", text: "Condições do poste e estrutura"},
+        {id: "4.4", group: "Visual Exterior", text: "Limpeza dos painéis solares"},
+        {id: "4.5", group: "Visual Exterior", text: "Condição do cabeamento externo"},
+        {id: "4.6", group: "Visual Exterior", text: "Verificação das antenas"},
+        {id: "4.7", group: "Visual Exterior", text: "Sinaleiro e sonofletores"},
+        {id: "4.8", group: "Visual Exterior", text: "Botão de acionamento local"},
+        {id: "4.9", group: "Visual Exterior", text: "Ponteira do coletor Franklin"},
+        {id: "4.10", group: "Visual Exterior", text: "Conexão cabos de aterramento e SPDA"},
+        {id: "5.1", group: "Medições", text: "Leitura da tensão das baterias"},
+        {id: "5.2", group: "Medições", text: "Leitura tensões controlador de carga"},
+        {id: "5.3", group: "Medições", text: "Leitura tensões reguladores DC/DC"},
+        {id: "5.4", group: "Medições", text: "Leitura tensão alimentação dos rádios"},
+        {id: "5.5", group: "Testes", text: "Testes de comunicação e acionamento"},
+        {id: "5.6", group: "Testes", text: "Teste surdo do sistema"},
+        {id: "5.7", group: "Testes", text: "Teste de potência do sistema"},
+        {id: "5.8", group: "Testes", text: "Acionamento pelo botão local"},
+        {id: "5.9", group: "Testes", text: "Verificação do alarme visual (strobe)"},
+        {id: "5.10", group: "Testes", text: "Teste de intrusão"},
+        {id: "5.11", group: "Testes", text: "Teste de voz com PA"},
+        {id: "6.1", group: "Relatórios", text: "Evidenciou itens inspecionados?"},
+        {id: "7.1", group: "Itens Críticos", text: "Disjuntores dos amplificadores ligados?"},
+        {id: "7.2", group: "Itens Críticos", text: "Cabo áudio controladora/TC-DA conectado?"},
+        {id: "7.3", group: "Itens Críticos", text: "Cabos áudio TC-DA/Amplificadores conectados?"},
+        {id: "7.4", group: "Itens Críticos", text: "Teste surdo final com sucesso?"},
+        {id: "8.1", group: "Finais", text: "Aumentar o volume das remotas"},
+        {id: "8.2", group: "Finais", text: "Comunicar ao CMG sobre término"}
+    ],
+
+    // =================================================================
+    // 3. INICIALIZAÇÃO E LOCAIS
+    // =================================================================
     selectLocation(loc) {
         this.currentLocation = loc;
         this.collectionName = `towers_${loc}`; 
@@ -38,14 +92,13 @@ const app = {
         this.init(); 
     },
 
-    // --- INICIALIZAÇÃO ---
     async init() {
         try {
             if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
             this.db = firebase.firestore();
             await idb.open();
 
-            // Listener Tempo Real
+            // Listener da Coleção Específica
             this.db.collection(this.collectionName).onSnapshot((snapshot) => {
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
@@ -100,7 +153,6 @@ const app = {
         for (const t of data) await idb.put('towers', t);
     },
 
-    // --- CRIAÇÃO DE DADOS ---
     async seedDatabase() {
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
@@ -138,7 +190,9 @@ const app = {
         this.renderList();
     },
 
-    // --- SALVAR (Incluindo fotos ilimitadas) ---
+    // =================================================================
+    // 4. GESTÃO DE TORRES (CRUD)
+    // =================================================================
     async saveTower(e) {
         e.preventDefault();
         const id = parseInt(document.getElementById('tower-id').value);
@@ -169,14 +223,14 @@ const app = {
                 material: document.getElementById('f-pend-material').value
             },
             observacoes: document.getElementById('f-obs').value,
-            // AQUI ESTÁ A CORREÇÃO: Salva o que está na tela (tempPhotos)
-            fotos: this.tempPhotos, 
+            fotos: this.tempPhotos, // Sem limite
             updatedAt: new Date().toISOString()
         };
 
         await idb.put('towers', tower);
         this.closeModal();
         
+        // UI Otimista
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
         this.renderList();
@@ -184,19 +238,16 @@ const app = {
         if (navigator.onLine && this.db) {
             try {
                 await this.db.collection(this.collectionName).doc(String(id)).set(tower);
-                console.log("Sincronizado na nuvem.");
-            } catch (error) { console.error("Erro sync:", error); }
+                console.log("Sincronizado.");
+            } catch (error) { console.error(error); }
         } else { console.log("Salvo offline."); }
     },
 
-    // --- RENDERIZAÇÃO ROBUSTA ---
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
-        if(!list || list.length === 0) {
-            container.innerHTML = '<p style="text-align:center; margin-top:20px;">Carregando...</p>';
-            return;
-        }
+        if(!list || list.length === 0) return;
+
         list.sort((a, b) => a.id - b.id);
 
         list.forEach(t => {
@@ -208,9 +259,9 @@ const app = {
                              (t.falhas.detectada && t.falhas.detectada.length > 1) ||
                              t.status === "Falha";
             
-            const alertHTML = hasAlert ? `<div class="warning-alert">Pendências encontradas — verifique!</div>` : '';
+            const alertHTML = hasAlert ? `<div class="warning-alert">⚠️ Pendências / Falhas</div>` : '';
             const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
-            const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
+            const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '';
             const val = (v) => (v && v.length > 0) ? v : '-';
 
             div.innerHTML = `
@@ -224,7 +275,7 @@ const app = {
                         <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(t.geral.localizacao)}</span></div>
                         <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(t.geral.tecnico)}</span></div>
                         <div class="info-item"><span class="info-label">Última Manut.</span><span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
-                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDate(t.geral.ultimaCom)} ${fmtDate(t.geral.ultimaCom) !== '-' ? new Date(t.geral.ultimaCom).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : ''}</span></div>
+                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDate(t.geral.ultimaCom)} ${fmtTime(t.geral.ultimaCom)}</span></div>
                         <div class="divider"></div>
                         <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Falha Detectada</span><span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span></div>
                         <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Pendência Material</span><span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span></div>
@@ -241,47 +292,163 @@ const app = {
         });
     },
 
-    // --- FOTOS ILIMITADAS E HD ---
-    handleImagePreview(e) { 
-        Array.from(e.target.files).forEach(file => { 
-            // Aumentei para 1280px e qualidade 0.8 (HD)
-            this.resizeImage(file, 1280, 1280, (b64) => { 
-                // REMOVIDO O LIMITE DE 3 FOTOS. Agora é infinito.
-                this.tempPhotos.push(b64); 
-                this.renderImagePreviews(); 
-            }); 
-        });
+    // =================================================================
+    // 5. MÓDULO CHECKLIST (NOVO)
+    // =================================================================
+    openChecklist() {
+        document.getElementById('checklist-screen').style.display = 'flex';
+        this.renderChecklistForm();
+        this.setupSignaturePad();
+        document.getElementById('chk-data').valueAsDate = new Date();
+        document.getElementById('chk-hora-inicio').value = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     },
 
-    resizeImage(file, w, h, cb) { 
-        const reader = new FileReader(); reader.readAsDataURL(file);
-        reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); 
-        // Qualidade aumentada para 0.8
-        cb(c.toDataURL('image/jpeg',0.8)); }; };
-    },
+    closeChecklist() { document.getElementById('checklist-screen').style.display = 'none'; },
 
-    // Renderiza as miniaturas com botão de EXCLUIR
-    renderImagePreviews() { 
-        const c = document.getElementById('image-preview-container'); c.innerHTML = '';
-        this.tempPhotos.forEach((src, i) => { 
-            const wrapper = document.createElement('div');
-            wrapper.className = 'photo-wrapper';
-            wrapper.innerHTML = `
-                <img src="${src}" class="img-preview" onclick="window.open('${src}')">
-                <div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>
+    renderChecklistForm() {
+        const container = document.getElementById('checklist-items-container');
+        container.innerHTML = '';
+        let currentGroup = '';
+
+        this.checklistItemsData.forEach(item => {
+            if (item.group !== currentGroup) {
+                currentGroup = item.group;
+                const header = document.createElement('div');
+                header.className = 'check-section';
+                header.innerHTML = `<h3>${currentGroup}</h3>`;
+                container.appendChild(header);
+            }
+            const section = container.lastElementChild;
+            const row = document.createElement('div');
+            row.className = 'chk-row';
+            row.innerHTML = `
+                <div class="chk-title">${item.id} - ${item.text}</div>
+                <div class="chk-controls">
+                    <div class="radio-group">
+                        <label class="radio-label"><input type="radio" name="status_${item.id}" value="OK" checked> OK</label>
+                        <label class="radio-label"><input type="radio" name="status_${item.id}" value="NOK"> NOK</label>
+                        <label class="radio-label"><input type="radio" name="status_${item.id}" value="NA"> N/A</label>
+                    </div>
+                </div>
+                <input type="text" class="chk-comment" id="comment_${item.id}" placeholder="Comentários...">
             `;
-            c.appendChild(wrapper);
+            section.appendChild(row);
         });
     },
 
-    removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
+    setupSignaturePad() {
+        const canvas = document.getElementById('signature-pad');
+        const ctx = canvas.getContext('2d');
+        const wrapper = document.querySelector('.signature-pad-wrapper');
+        canvas.width = wrapper.offsetWidth;
+        canvas.height = wrapper.offsetHeight;
+        ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
 
-    // --- UTILS (PDF, Modal, etc) ---
+        const startDraw = (e) => {
+            this.isDrawing = true; ctx.beginPath();
+            const { offsetX, offsetY } = this.getPos(e, canvas);
+            ctx.moveTo(offsetX, offsetY);
+        };
+        const draw = (e) => {
+            if (!this.isDrawing) return;
+            const { offsetX, offsetY } = this.getPos(e, canvas);
+            ctx.lineTo(offsetX, offsetY); ctx.stroke();
+        };
+        const stopDraw = () => { this.isDrawing = false; };
+
+        canvas.onmousedown = startDraw; canvas.onmousemove = draw; canvas.onmouseup = stopDraw;
+        canvas.ontouchstart = (e) => { e.preventDefault(); startDraw(e); };
+        canvas.ontouchmove = (e) => { e.preventDefault(); draw(e); };
+        canvas.ontouchend = stopDraw;
+    },
+
+    getPos(e, canvas) {
+        if (e.touches && e.touches.length > 0) {
+            const rect = canvas.getBoundingClientRect();
+            return { offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top };
+        }
+        return { offsetX: e.offsetX, offsetY: e.offsetY };
+    },
+
+    clearSignature() {
+        const canvas = document.getElementById('signature-pad');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    },
+
+    generateChecklistPDF() {
+        if(!confirm("Finalizar e gerar PDF do Checklist?")) return;
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 14, 10, 30, 15); } catch(e){}
+        doc.setFontSize(8); doc.setTextColor(0); doc.text("SOLUÇÕES EM TECNOLOGIA", 14, 30);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+        doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 196, 15, null, null, "right");
+        doc.text("SISTEMA DE NOTIFICAÇÃO EM MASSA", 196, 20, null, null, "right");
+
+        doc.setDrawColor(0); doc.setFillColor(240, 240, 240); doc.rect(14, 35, 182, 20);
+        doc.setFontSize(9); doc.setFont("helvetica", "normal");
+        
+        const data = document.getElementById('chk-data').value;
+        const hora = document.getElementById('chk-hora-inicio').value;
+        const clima = document.getElementById('chk-clima').value;
+        const veiculo = document.getElementById('chk-recurso').value;
+        const exec = document.getElementById('chk-executantes').value;
+
+        doc.text(`UNIDADE: ${this.currentLocation}   |   DATA: ${data}   |   HORÁRIO: ${hora}`, 16, 42);
+        doc.text(`CLIMA: ${clima}   |   RECURSO: ${veiculo}`, 16, 48);
+        doc.text(`EXECUTANTES: ${exec}`, 16, 54);
+
+        const tableBody = [];
+        this.checklistItemsData.forEach(item => {
+            const status = document.querySelector(`input[name="status_${item.id}"]:checked`).value;
+            const comment = document.getElementById(`comment_${item.id}`).value;
+            tableBody.push([item.id, item.text, status, comment]);
+        });
+
+        doc.autoTable({
+            startY: 60,
+            head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']],
+            body: tableBody,
+            theme: 'grid',
+            headStyles: { fillColor: [0, 86, 179], textColor: 255 },
+            styles: { fontSize: 8, cellPadding: 2 },
+            columnStyles: { 0: { cellWidth: 15 }, 2: { cellWidth: 20 } },
+            didParseCell: function(data) {
+                if (data.section === 'body' && data.column.index === 2) {
+                    if (data.cell.raw === 'NOK') data.cell.styles.textColor = [200, 0, 0];
+                    if (data.cell.raw === 'OK') data.cell.styles.textColor = [0, 100, 0];
+                }
+            }
+        });
+
+        let finalY = doc.lastAutoTable.finalY + 20;
+        if(finalY > 250) { doc.addPage(); finalY = 40; }
+
+        doc.text("Responsável Técnico (CMG):", 14, finalY);
+        doc.text(document.getElementById('chk-ass-nome').value, 14, finalY + 7);
+        
+        try {
+            const canvas = document.getElementById('signature-pad');
+            const imgData = canvas.toDataURL('image/png');
+            doc.addImage(imgData, 'PNG', 70, finalY - 10, 60, 30);
+            doc.line(70, finalY + 20, 130, finalY + 20);
+        } catch(e) {}
+
+        doc.save(`Checklist_${this.currentLocation}_${data}.pdf`);
+    },
+
+    // =================================================================
+    // 6. RELATÓRIOS (GERAL, MENSAL, INDIVIDUAL)
+    // =================================================================
     generateGlobalPDF() {
         if(!confirm(`Gerar relatório completo de ${this.currentLocation}?`)) return;
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
+        
         if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 75, 30, 60, 30); } catch (e) {}
+
         doc.setFont("times", "bold"); doc.setFontSize(18);
         let y = 90;
         doc.text("SERVIÇOS DE MANUTENÇÃO DO", 105, y, null, null, "center"); y+=10;
@@ -289,15 +456,18 @@ const app = {
         doc.text("MASSA", 105, y, null, null, "center"); y+=30;
         doc.setFontSize(16);
         doc.text("MINERAÇÃO ANGLOGOLD ASHANTI", 105, y, null, null, "center"); y+=10;
+        
         let subTitle = "– CDS – SANTA BÁRBARA – MG"; 
         if(this.currentLocation === 'MSG') subTitle = "– MSG – CRIXÁS – GO"; 
         if(this.currentLocation === 'CUIABA') subTitle = "– CUIABÁ – SABARÁ – MG"; 
         if(this.currentLocation === 'QUEIROZ') subTitle = "– QUEIROZ – RAPOSOS – MG";
         doc.text(subTitle, 105, y, null, null, "center");
+        
         doc.setFontSize(12); doc.setFont("times", "normal");
         const hoje = new Date();
         const mes = hoje.toLocaleString('pt-BR', { month: 'long' });
         doc.text(`${mes.charAt(0).toUpperCase() + mes.slice(1)} de ${hoje.getFullYear()}`, 105, 260, null, null, "center");
+
         const lista = [...this.towers].sort((a,b) => a.id - b.id);
         lista.forEach((t, i) => { doc.addPage(); this.drawTowerPage(doc, t, i + 1, lista.length); });
         doc.save(`Relatorio_${this.currentLocation}_${new Date().toISOString().slice(0,10)}.pdf`);
@@ -354,7 +524,13 @@ const app = {
         if(pageNumber) { doc.setFontSize(9); doc.setFont("times", "normal"); doc.text(`Página ${pageNumber} de ${totalPages}`, 105, 290, null, null, "center"); }
     },
 
-    generatePDF(id) { const t = this.towers.find(x => x.id == id); const { jsPDF } = window.jspdf; const doc = new jsPDF(); this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`); },
+    generatePDF(id) { 
+        const t = this.towers.find(x => x.id == id);
+        const { jsPDF } = window.jspdf; const doc = new jsPDF();
+        this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`);
+    },
+
+    // --- FUNÇÕES UTILITÁRIAS ---
     filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
     closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
     editTower(id) { 
@@ -382,6 +558,32 @@ const app = {
         this.renderImagePreviews();
         document.getElementById('modal').style.display = 'block';
     },
-    updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; },
-    syncNow() { if(navigator.onLine && this.db) { this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t)); alert("Sincronizando..."); } else { alert("Sem internet."); } }
+    handleImagePreview(e) { 
+        Array.from(e.target.files).forEach(file => { this.resizeImage(file, 1280, 1280, (b64) => { this.tempPhotos.push(b64); this.renderImagePreviews(); }); });
+    },
+    resizeImage(file, w, h, cb) { 
+        const reader = new FileReader(); reader.readAsDataURL(file);
+        reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',0.8)); }; };
+    },
+    renderImagePreviews() { 
+        const c = document.getElementById('image-preview-container'); c.innerHTML = '';
+        this.tempPhotos.forEach((src, i) => { 
+            const d = document.createElement('div'); 
+            d.className = 'photo-wrapper';
+            d.innerHTML = `<img src="${src}" class="img-preview" onclick="window.open('${src}')"><div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>`; 
+            c.appendChild(d); 
+        });
+    },
+    removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
+    updateOnlineStatus() {
+        const el = document.getElementById('connection-status');
+        el.innerText = navigator.onLine ? "Online" : "Offline";
+        el.className = navigator.onLine ? "status-badge online" : "status-badge offline";
+    },
+    syncNow() {
+        if(navigator.onLine && this.db) {
+            this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t));
+            alert("Sincronizando...");
+        } else { alert("Sem internet."); }
+    }
 };
