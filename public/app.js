@@ -1,14 +1,15 @@
 const app = {
-    // VARIÁVEIS DE ESTADO
-    towers: [],
-    tempPhotos: [],
-    db: null,
-    currentLocation: "", // 'QUEIROZ', 'CUIABA', 'MSG', 'CDS'
-    collectionName: "",  // ex: 'towers_CDS'
+    // --- ESTADO DO APP ---
+    towers: [], tempPhotos: [], db: null,
+    currentLocation: "", collectionName: "",
     
-    // VARIÁVEIS DO CHECKLIST
-    signaturePad: null,
-    isDrawing: false,
+    // --- CONTROLE DE ACESSO ---
+    userRole: "", // 'admin' ou 'visitor'
+    adminUser: "adm",
+    adminPass: "Tecal123",
+    
+    // --- CHECKLIST ---
+    signaturePad: null, isDrawing: false,
 
     // Variáveis de Controle
     currentLocation: "'QUEIROZ', 'CUIABA', 'MSG', 'CDS'", // Ex: 'CDS'
@@ -76,7 +77,35 @@ const app = {
         {id: "8.2", group: "Finais", text: "Comunicar ao CMG sobre término"}
     ],
 
-    // --- SELEÇÃO DE LOCAL ---
+    // =================================================================
+    // 3. SISTEMA DE LOGIN E LOCALIZAÇÃO
+    // =================================================================
+    checkLogin() {
+        const u = document.getElementById('login-user').value;
+        const p = document.getElementById('login-pass').value;
+        if (u === this.adminUser && p === this.adminPass) {
+            this.userRole = 'admin';
+            this.showLocationScreen();
+        } else {
+            alert("Login Inválido!");
+        }
+    },
+
+    visitorLogin() {
+        this.userRole = 'visitor';
+        this.showLocationScreen();
+    },
+
+    showLocationScreen() {
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('location-screen').style.display = 'flex';
+        // Se for visitante, esconde botão de checklist no header
+        if(this.userRole === 'visitor') {
+            const btnCheck = document.getElementById('btn-new-checklist');
+            if(btnCheck) btnCheck.style.display = 'none';
+        }
+    },
+
     selectLocation(loc) {
         this.currentLocation = loc;
         this.collectionName = `towers_${loc}`; 
@@ -86,18 +115,54 @@ const app = {
         this.init(); 
     },
 
+    // =================================================================
+    // 4. INICIALIZAÇÃO FIREBASE/OFFLINE
+    // =================================================================
     async init() {
-        if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
-        this.db = firebase.firestore();
-        await idb.open();
-        this.db.collection(this.collectionName).onSnapshot((snapshot) => {
-            document.getElementById('loading-msg').style.display = 'none';
-            if (!snapshot.empty) {
-                const cloudData = []; snapshot.forEach(doc => cloudData.push(doc.data()));
-                this.towers = cloudData; this.renderList();
-            } else { this.seedDatabase(); }
-        });
+        try {
+            if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
+            this.db = firebase.firestore();
+            await idb.open();
+
+            this.db.collection(this.collectionName).onSnapshot((snapshot) => {
+                document.getElementById('loading-msg').style.display = 'none';
+                if (!snapshot.empty) {
+                    const cloudData = []; snapshot.forEach(doc => cloudData.push(doc.data()));
+                    this.towers = cloudData; this.updateLocalBackup(cloudData); this.renderList();
+                } else { this.checkDataIntegrity(); }
+            }, (error) => {
+                console.log("Offline.");
+                const loading = document.getElementById('loading-msg');
+                if(loading) loading.style.display = 'none';
+                this.loadFromLocal();
+            });
+        } catch (e) { console.error("Erro init:", e); this.loadFromLocal(); }
+
+        this.updateOnlineStatus();
+        window.addEventListener('online', () => this.updateOnlineStatus());
+        window.addEventListener('offline', () => this.updateOnlineStatus());
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
+    },
+
+    async checkDataIntegrity() {
+        const localData = await idb.getAll('towers');
+        if (localData.length > 0) {
+            this.towers = localData;
+            if(navigator.onLine && this.userRole === 'admin') this.syncNow();
+        } else { await this.seedDatabase(); }
+        this.renderList();
+    },
+
+    async loadFromLocal() {
+        document.getElementById('loading-msg').style.display = 'none';
+        this.towers = await idb.getAll('towers');
+        if(this.towers.length === 0) await this.seedDatabase();
+        this.renderList();
+    },
+
+    async updateLocalBackup(data) {
+        await idb.clear('towers');
+        for (const t of data) await idb.put('towers', t);
     },
 
     async seedDatabase() {
@@ -116,179 +181,133 @@ const app = {
                 observacoes: "", fotos: [], updatedAt: nowStr
             };
             this.towers.push(tower);
-            if(batch) {
-                const docRef = this.db.collection(this.collectionName).doc(String(i));
-                batch.set(docRef, tower);
+            if(batch && this.userRole === 'admin') {
+                batch.set(this.db.collection(this.collectionName).doc(String(i)), tower);
             }
         }
         await idb.clear('towers'); for(const t of this.towers) await idb.put('towers', t);
-        if(batch) await batch.commit();
+        if(batch && this.userRole === 'admin') await batch.commit();
         this.renderList();
     },
 
+    // =================================================================
+    // 5. RENDERIZAÇÃO "CLÁSSICA" (VISUAL LIMPO)
+    // =================================================================
     renderList(list = this.towers) {
-        const container = document.getElementById('tower-list'); container.innerHTML = '';
+        const container = document.getElementById('tower-list');
+        container.innerHTML = '';
         if(!list || list.length === 0) return;
         list.sort((a, b) => a.id - b.id);
+
         list.forEach(t => {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
-            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || t.status === "Falha";
-            div.innerHTML = `<div class="card-header"><strong>🔔 ${t.nome}</strong><span class="status-pill">${t.status}</span></div>${hasAlert ? '<div class="warning-alert">⚠️ Pendências</div>' : ''}<div class="card-body"><div class="info-grid"><div class="info-item"><span class="info-label">Local</span><span>${t.geral.localizacao||'-'}</span></div></div></div><div class="card-footer"><button class="btn-card btn-edit" onclick="app.editTower(${t.id})">Editar</button></div>`;
+            
+            const hasAlert = t.status === "Falha" || (t.pendencias.material && t.pendencias.material.length > 1) || (t.falhas.detectada && t.falhas.detectada.length > 1);
+            const alertHTML = hasAlert ? `<div class="warning-alert">⚠️ Pendências / Falhas</div>` : '';
+            
+            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
+            const val = (v) => (v && v.length > 0) ? v : '-';
+
+            // Botão Editar (Apenas para Admin)
+            const editBtn = (this.userRole === 'admin') 
+                ? `<button class="btn-card btn-edit" onclick="app.editTower(${t.id})">Editar</button>` 
+                : '';
+
+            div.innerHTML = `
+                <div class="card-header">
+                    <strong>🔔 ${t.nome}</strong>
+                    <span class="status-pill">${t.status}</span>
+                </div>
+                ${alertHTML}
+                <div class="card-body">
+                    <div class="info-row"><span class="info-label">Local:</span> <span class="info-val">${val(t.geral.localizacao)}</span></div>
+                    <div class="info-row"><span class="info-label">Técnico:</span> <span class="info-val">${val(t.geral.tecnico)}</span></div>
+                    <div class="info-row"><span class="info-label">Manut.:</span> <span class="info-val">${fmtDate(t.manutencao.ultima)}</span></div>
+                    
+                    ${t.falhas.detectada ? `<div class="info-row" style="color:red"><span class="info-label">Falha:</span> <span class="info-val">${t.falhas.detectada}</span></div>` : ''}
+                    ${t.fotos.length > 0 ? `<div style="margin-top:5px; color:blue; font-size:0.85rem">📷 ${t.fotos.length} fotos</div>` : ''}
+                </div>
+                <div class="card-footer">
+                    <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">PDF</button>
+                    ${editBtn}
+                </div>
+            `;
             container.appendChild(div);
         });
     },
 
-    // --- CHECKLIST ---
-    openChecklist() {
-        document.getElementById('checklist-screen').style.display = 'flex';
-        this.renderChecklistForm();
-        this.setupSignaturePad();
-        document.getElementById('chk-data').valueAsDate = new Date();
-        document.getElementById('chk-hora-inicio').value = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        const end = new Date(); end.setMinutes(end.getMinutes() + 30);
-        document.getElementById('chk-hora-fim').value = end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-    },
+    // --- SALVAR (APENAS ADMIN) ---
+    async saveTower(e) {
+        e.preventDefault();
+        if(this.userRole !== 'admin') return alert("Apenas Admin pode salvar!");
 
-    closeChecklist() { document.getElementById('checklist-screen').style.display = 'none'; },
+        const id = parseInt(document.getElementById('tower-id').value);
+        const existing = this.towers.find(x => x.id === id) || {};
 
-    renderChecklistForm() {
-        const container = document.getElementById('checklist-items-container'); container.innerHTML = '';
-        let currentGroup = '';
-        this.checklistItemsData.forEach(item => {
-            if (item.group !== currentGroup) {
-                currentGroup = item.group;
-                const header = document.createElement('div');
-                header.className = 'check-section'; header.innerHTML = `<h3>${currentGroup}</h3>`;
-                container.appendChild(header);
-            }
-            const section = container.lastElementChild;
-            const row = document.createElement('div');
-            row.className = 'chk-row';
-            row.innerHTML = `
-                <div class="chk-title">${item.id} - ${item.text}</div>
-                <div class="chk-controls"><div class="radio-group"><label class="radio-label"><input type="radio" name="status_${item.id}" value="OK" checked> OK</label><label class="radio-label"><input type="radio" name="status_${item.id}" value="NOK"> NOK</label><label class="radio-label"><input type="radio" name="status_${item.id}" value="NA"> N/A</label></div></div>
-                <input type="text" class="chk-comment" id="comment_${item.id}" placeholder="Comentários...">
-            `;
-            section.appendChild(row);
-        });
-    },
+        const tower = {
+            id: id,
+            nome: document.getElementById('f-nome').value,
+            status: document.getElementById('f-status').value,
+            geral: {
+                localizacao: document.getElementById('f-geral-local').value,
+                prioridade: document.getElementById('f-geral-prio').value,
+                tecnico: document.getElementById('f-geral-tec').value,
+                ultimaCom: document.getElementById('f-geral-ultimacom').value
+            },
+            falhas: {
+                detectada: document.getElementById('f-falhas-detectada').value,
+                historico: document.getElementById('f-falhas-historico').value,
+                acao: document.getElementById('f-falhas-acao').value
+            },
+            manutencao: {
+                ultima: document.getElementById('f-manu-ultima').value,
+                proxima: document.getElementById('f-manu-proxima').value,
+                custo: document.getElementById('f-manu-custo').value,
+                pecas: document.getElementById('f-manu-pecas').value
+            },
+            pendencias: {
+                servico: document.getElementById('f-pend-servico').value,
+                material: document.getElementById('f-pend-material').value
+            },
+            observacoes: document.getElementById('f-obs').value,
+            fotos: this.tempPhotos,
+            updatedAt: new Date().toISOString()
+        };
 
-    setupSignaturePad() {
-        const canvas = document.getElementById('signature-pad');
-        const ctx = canvas.getContext('2d');
-        const wrapper = document.querySelector('.signature-pad-wrapper');
-        canvas.width = wrapper.offsetWidth; canvas.height = wrapper.offsetHeight;
-        ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
-        const startDraw = (e) => { this.isDrawing = true; ctx.beginPath(); const { offsetX, offsetY } = this.getPos(e, canvas); ctx.moveTo(offsetX, offsetY); };
-        const draw = (e) => { if (!this.isDrawing) return; const { offsetX, offsetY } = this.getPos(e, canvas); ctx.lineTo(offsetX, offsetY); ctx.stroke(); };
-        const stopDraw = () => { this.isDrawing = false; };
-        canvas.onmousedown = startDraw; canvas.onmousemove = draw; canvas.onmouseup = stopDraw;
-        canvas.ontouchstart = (e) => { e.preventDefault(); startDraw(e); }; canvas.ontouchmove = (e) => { e.preventDefault(); draw(e); }; canvas.ontouchend = stopDraw;
+        await idb.put('towers', tower);
+        this.closeModal();
+        
+        const index = this.towers.findIndex(t => t.id === id);
+        if(index !== -1) this.towers[index] = tower;
+        this.renderList();
+
+        if (navigator.onLine && this.db) {
+            try { await this.db.collection(this.collectionName).doc(String(id)).set(tower); }
+            catch (error) { console.error(error); }
+        }
     },
-    getPos(e, canvas) { if (e.touches && e.touches.length > 0) { const rect = canvas.getBoundingClientRect(); return { offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top }; } return { offsetX: e.offsetX, offsetY: e.offsetY }; },
-    clearSignature() { const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); },
 
     // =================================================================
-    // FUNÇÃO INTELIGENTE PARA LOGO (ANTISTRETCH)
+    // 6. PDF GERAL E MENSAL (INTELIGENTE)
     // =================================================================
     async drawSmartLogo(doc, base64, x, y, maxW, maxH) {
         if (!base64 || base64.length < 100) return;
         return new Promise((resolve) => {
-            const img = new Image();
-            img.src = base64;
+            const img = new Image(); img.src = base64;
             img.onload = () => {
-                const ratio = img.width / img.height;
-                let newW = maxW;
-                let newH = maxW / ratio;
-                if (newH > maxH) { newH = maxH; newW = maxH * ratio; }
-                
-                // Centraliza no box
-                const finalX = x + (maxW - newW) / 2;
-                const finalY = y + (maxH - newH) / 2;
-                
-                try { doc.addImage(base64, 'PNG', finalX, finalY, newW, newH); } catch(e){}
+                const r = img.width / img.height; let w = maxW, h = maxW/r;
+                if (h > maxH) { h = maxH; w = maxH * r; }
+                try { doc.addImage(base64, 'PNG', x+(maxW-w)/2, y+(maxH-h)/2, w, h); } catch(e){}
                 resolve();
             };
-            img.onerror = resolve; 
+            img.onerror = resolve;
         });
     },
 
-    // --- GERAR PDF DO CHECKLIST ---
-    async generateChecklistPDF() {
-        if(!confirm("Gerar PDF do Checklist?")) return;
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-
-        // Logos Inteligentes (Não esticam)
-        await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 40, 20);
-        await this.drawSmartLogo(doc, this.logoCliente, 156, 10, 40, 20);
-
-        doc.setFontSize(8); doc.setTextColor(0); doc.text("SOLUÇÕES EM TECNOLOGIA", 14, 35);
-        
-        doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-        doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 105, 15, null, null, "center");
-        doc.text("SISTEMA DE NOTIFICAÇÃO EM MASSA", 105, 20, null, null, "center");
-
-        doc.setDrawColor(0); doc.setFillColor(240, 240, 240); doc.rect(14, 38, 182, 20);
-        doc.setFontSize(9); doc.setFont("helvetica", "normal");
-        
-        const data = document.getElementById('chk-data').value;
-        const horaIni = document.getElementById('chk-hora-inicio').value;
-        const horaFim = document.getElementById('chk-hora-fim').value;
-        const clima = document.getElementById('chk-clima').value;
-        const veiculo = document.getElementById('chk-recurso').value;
-        const exec = document.getElementById('chk-executantes').value;
-
-        doc.text(`UNIDADE: ${this.currentLocation}   |   DATA: ${data}`, 16, 45);
-        doc.text(`INÍCIO: ${horaIni}   |   TÉRMINO: ${horaFim}`, 16, 51);
-        doc.text(`CLIMA: ${clima}   |   RECURSO: ${veiculo}`, 120, 45);
-        doc.text(`EXECUTANTES: ${exec}`, 16, 57);
-
-        const tableBody = [];
-        this.checklistItemsData.forEach(item => {
-            const status = document.querySelector(`input[name="status_${item.id}"]:checked`).value;
-            const comment = document.getElementById(`comment_${item.id}`).value;
-            tableBody.push([item.id, item.text, status, comment]);
-        });
-
-        doc.autoTable({
-            startY: 65,
-            head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']],
-            body: tableBody,
-            theme: 'grid',
-            headStyles: { fillColor: [0, 86, 179], textColor: 255 },
-            styles: { fontSize: 8, cellPadding: 2 },
-            columnStyles: { 0: { cellWidth: 15 }, 2: { cellWidth: 20 } },
-            didParseCell: function(data) {
-                if (data.section === 'body' && data.column.index === 2) {
-                    if (data.cell.raw === 'NOK') data.cell.styles.textColor = [200, 0, 0];
-                    if (data.cell.raw === 'OK') data.cell.styles.textColor = [0, 100, 0];
-                }
-            }
-        });
-
-        let finalY = doc.lastAutoTable.finalY + 20;
-        if(finalY > 250) { doc.addPage(); finalY = 40; }
-
-        doc.text("Responsável Técnico (TECAL):", 14, finalY);
-        doc.text(document.getElementById('chk-ass-nome').value, 14, finalY + 7);
-        
-        try {
-            const canvas = document.getElementById('signature-pad');
-            const imgData = canvas.toDataURL('image/png');
-            doc.addImage(imgData, 'PNG', 70, finalY - 10, 60, 30);
-            doc.line(70, finalY + 20, 130, finalY + 20);
-        } catch(e) {}
-
-        doc.save(`Checklist_${this.currentLocation}_${data}.pdf`);
-    },
-
-    // --- RELATÓRIOS GERAIS (COM LOGO INTELIGENTE) ---
     async generateGlobalPDF() {
         if(!confirm(`Gerar relatório completo de ${this.currentLocation}?`)) return;
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
+        const { jsPDF } = window.jspdf; const doc = new jsPDF();
         
         await this.drawSmartLogo(doc, this.logoEmpresa, 75, 30, 60, 30);
 
@@ -311,7 +330,6 @@ const app = {
         const mes = hoje.toLocaleString('pt-BR', { month: 'long' });
         doc.text(`${mes.charAt(0).toUpperCase() + mes.slice(1)} de ${hoje.getFullYear()}`, 105, 260, null, null, "center");
 
-        // Loop Async para desenhar páginas corretamente
         const lista = [...this.towers].sort((a,b) => a.id - b.id);
         for(let i=0; i<lista.length; i++) {
             doc.addPage();
@@ -322,7 +340,7 @@ const app = {
 
     async generateMonthlyPDF() {
         const input = prompt("Mês/Ano (ex: 12/2025):"); if (!input) return;
-        const [mes, ano] = input.split('/'); if (!mes || !ano) return alert("Erro no formato.");
+        const [mes, ano] = input.split('/'); if (!mes || !ano) return alert("Erro.");
         const filtered = this.towers.filter(t => {
             if (!t.manutencao.ultima) return false;
             const d = new Date(t.manutencao.ultima); d.setHours(12);
@@ -332,7 +350,6 @@ const app = {
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
         
         await this.drawSmartLogo(doc, this.logoEmpresa, 75, 20, 60, 30);
-        
         doc.setFont("times", "bold"); doc.setFontSize(18);
         doc.text("RELATÓRIO MENSAL", 105, 80, null, null, "center");
         doc.text(`Período: ${input} - ${this.currentLocation}`, 105, 100, null, null, "center");
@@ -375,9 +392,7 @@ const app = {
             doc.setFont("times", "bold"); doc.text("Registro Fotográfico", 105, y, null, null, "center"); y+=15;
             for(const f of t.fotos) {
                 if(y>200) { doc.addPage(); y=30; }
-                // Fotos usam o mesmo sistema Smart para não esticar
-                await this.drawSmartLogo(doc, f, 35, y, 140, 100); 
-                y+=105;
+                await this.drawSmartLogo(doc, f, 35, y, 140, 100); y+=105;
             }
         }
         if(pageNumber) { doc.setFontSize(9); doc.setFont("times", "normal"); doc.text(`Página ${pageNumber} de ${totalPages}`, 105, 290, null, null, "center"); }
@@ -386,16 +401,82 @@ const app = {
     async generatePDF(id) { 
         const t = this.towers.find(x => x.id == id);
         const { jsPDF } = window.jspdf; const doc = new jsPDF(); 
-        await this.drawTowerPage(doc, t, 1, 1); 
-        doc.save(`${t.nome}.pdf`); 
+        await this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`); 
     },
 
-    // --- FUNÇÕES UTILITÁRIAS ---
-    saveTower(e) { 
-        e.preventDefault(); const id = parseInt(document.getElementById('tower-id').value);
-        const tower = { id: id, nome: document.getElementById('f-nome').value, status: document.getElementById('f-status').value, geral: { localizacao: document.getElementById('f-geral-local').value, prioridade: document.getElementById('f-geral-prio').value, tecnico: document.getElementById('f-geral-tec').value, ultimaCom: document.getElementById('f-geral-ultimacom').value }, falhas: { detectada: document.getElementById('f-falhas-detectada').value, historico: document.getElementById('f-falhas-historico').value, acao: document.getElementById('f-falhas-acao').value }, manutencao: { ultima: document.getElementById('f-manu-ultima').value, proxima: document.getElementById('f-manu-proxima').value, custo: document.getElementById('f-manu-custo').value, pecas: document.getElementById('f-manu-pecas').value }, pendencias: { servico: document.getElementById('f-pend-servico').value, material: document.getElementById('f-pend-material').value }, observacoes: document.getElementById('f-obs').value, fotos: this.tempPhotos, updatedAt: new Date().toISOString() };
-        this.db.collection(this.collectionName).doc(String(id)).set(tower); this.closeModal();
+    // --- CHECKLIST ---
+    openChecklist() {
+        if(this.userRole !== 'admin') return alert("Acesso Restrito a Admin!");
+        document.getElementById('checklist-screen').style.display = 'flex';
+        this.renderChecklistForm(); this.setupSignaturePad();
+        document.getElementById('chk-data').valueAsDate = new Date();
+        document.getElementById('chk-hora-inicio').value = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     },
+    closeChecklist() { document.getElementById('checklist-screen').style.display = 'none'; },
+    renderChecklistForm() {
+        const container = document.getElementById('checklist-items-container'); container.innerHTML = '';
+        let currentGroup = '';
+        this.checklistItemsData.forEach(item => {
+            if (item.group !== currentGroup) { currentGroup = item.group; container.innerHTML += `<div class="check-section"><h3>${currentGroup}</h3></div>`; }
+            const section = container.lastElementChild;
+            const row = document.createElement('div'); row.className = 'chk-row';
+            row.innerHTML = `<div class="chk-title">${item.id} - ${item.text}</div><div class="chk-controls"><div class="radio-group"><label class="radio-label"><input type="radio" name="status_${item.id}" value="OK" checked> OK</label><label class="radio-label"><input type="radio" name="status_${item.id}" value="NOK"> NOK</label><label class="radio-label"><input type="radio" name="status_${item.id}" value="NA"> N/A</label></div></div><input type="text" class="chk-comment" id="comment_${item.id}" placeholder="Comentários...">`;
+            section.appendChild(row);
+        });
+    },
+    setupSignaturePad() {
+        const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d');
+        const wrapper = document.querySelector('.signature-pad-wrapper'); canvas.width = wrapper.offsetWidth; canvas.height = wrapper.offsetHeight;
+        ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
+        const startDraw = (e) => { this.isDrawing = true; ctx.beginPath(); const { offsetX, offsetY } = this.getPos(e, canvas); ctx.moveTo(offsetX, offsetY); };
+        const draw = (e) => { if (!this.isDrawing) return; const { offsetX, offsetY } = this.getPos(e, canvas); ctx.lineTo(offsetX, offsetY); ctx.stroke(); };
+        const stopDraw = () => { this.isDrawing = false; };
+        canvas.onmousedown = startDraw; canvas.onmousemove = draw; canvas.onmouseup = stopDraw;
+        canvas.ontouchstart = (e) => { e.preventDefault(); startDraw(e); }; canvas.ontouchmove = (e) => { e.preventDefault(); draw(e); }; canvas.ontouchend = stopDraw;
+    },
+    getPos(e, canvas) { if (e.touches && e.touches.length > 0) { const rect = canvas.getBoundingClientRect(); return { offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top }; } return { offsetX: e.offsetX, offsetY: e.offsetY }; },
+    clearSignature() { const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); },
+
+    async generateChecklistPDF() {
+        if(!confirm("Gerar PDF?")) return;
+        const { jsPDF } = window.jspdf; const doc = new jsPDF();
+        await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
+        await this.drawSmartLogo(doc, this.logoCliente, 166, 10, 30, 15);
+        doc.setFontSize(8); doc.setTextColor(0); doc.text("SOLUÇÕES EM TECNOLOGIA", 14, 30);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+        doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 105, 15, null, null, "center");
+        doc.text("SISTEMA DE NOTIFICAÇÃO EM MASSA", 105, 20, null, null, "center");
+        doc.setDrawColor(0); doc.setFillColor(240, 240, 240); doc.rect(14, 35, 182, 20);
+        doc.setFontSize(9); doc.setFont("helvetica", "normal");
+        const data = document.getElementById('chk-data').value;
+        const horaIni = document.getElementById('chk-hora-inicio').value;
+        const horaFim = document.getElementById('chk-hora-fim').value;
+        const clima = document.getElementById('chk-clima').value;
+        const veiculo = document.getElementById('chk-recurso').value;
+        const exec = document.getElementById('chk-executantes').value;
+        doc.text(`UNIDADE: ${this.currentLocation}   |   DATA: ${data}`, 16, 42);
+        doc.text(`INÍCIO: ${horaIni}   |   TÉRMINO: ${horaFim}`, 16, 48);
+        doc.text(`CLIMA: ${clima}   |   RECURSO: ${veiculo}`, 120, 42);
+        doc.text(`EXECUTANTES: ${exec}`, 16, 54);
+        
+        const tableBody = [];
+        this.checklistItemsData.forEach(item => {
+            const status = document.querySelector(`input[name="status_${item.id}"]:checked`).value;
+            const comment = document.getElementById(`comment_${item.id}`).value;
+            tableBody.push([item.id, item.text, status, comment]);
+        });
+        doc.autoTable({ startY: 60, head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], body: tableBody, theme: 'grid', headStyles: { fillColor: [0, 86, 179], textColor: 255 }, styles: { fontSize: 8, cellPadding: 2 }, didParseCell: function(data) { if (data.section === 'body' && data.column.index === 2) { if (data.cell.raw === 'NOK') data.cell.styles.textColor = [200, 0, 0]; if (data.cell.raw === 'OK') data.cell.styles.textColor = [0, 100, 0]; } } });
+        
+        let finalY = doc.lastAutoTable.finalY + 20; if(finalY > 250) { doc.addPage(); finalY = 40; }
+        doc.text("Responsável Técnico (TECAL):", 14, finalY);
+        doc.text(document.getElementById('chk-ass-nome').value, 14, finalY + 7);
+        try { const canvas = document.getElementById('signature-pad'); const imgData = canvas.toDataURL('image/png'); doc.addImage(imgData, 'PNG', 70, finalY - 10, 60, 30); doc.line(70, finalY + 20, 130, finalY + 20); } catch(e){}
+        doc.save(`Checklist_${this.currentLocation}_${data}.pdf`);
+    },
+
+    // --- UTILS GERAIS ---
+    filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
+    closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
     editTower(id) { 
         const t = this.towers.find(x => x.id == id); if(!t) return;
         this.tempPhotos = [...t.fotos] || [];
@@ -413,8 +494,6 @@ const app = {
     resizeImage(file, w, h, cb) { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',0.8)); }; }; },
     renderImagePreviews() { const c = document.getElementById('image-preview-container'); c.innerHTML = ''; this.tempPhotos.forEach((src, i) => { const d = document.createElement('div'); d.className='photo-wrapper'; d.innerHTML = `<img src="${src}" class="img-preview" onclick="window.open('${src}')"><div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>`; c.appendChild(d); }); },
     removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
-    syncNow() { window.location.reload(); },
-    filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
-    closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
-    updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; }
+    updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; },
+    syncNow() { if(navigator.onLine && this.db && this.userRole === 'admin') { this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t)); alert("Sincronizando..."); } else { alert("Sem internet ou sem permissão."); } }
 };
