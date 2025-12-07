@@ -66,10 +66,7 @@
                 <h3>Dados Iniciais</h3>
                 <div class="two-col">
                     <div><label>Data</label><input type="date" id="chk-data"></div>
-                    <div style="display:flex; gap:5px;">
-                        <div style="flex:1"><label>Início</label><input type="time" id="chk-hora-inicio"></div>
-                        <div style="flex:1"><label>Término</label><input type="time" id="chk-hora-fim"></div>
-                    </div>
+                    <div><label>Horário Início</label><input type="time" id="chk-hora-inicio"></div>
                 </div>
                 <div class="two-col">
                     <div><label>Clima</label><select id="chk-clima"><option>Ensolarado</option><option>Nublado</option><option>Chuvoso</option></select></div>
@@ -81,7 +78,14 @@
             <div id="checklist-items-container"></div>
 
             <div class="check-section">
-                <h3>Assinatura do Técnico (CMG)</h3>
+                <h3>Finalização e Assinatura</h3>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="font-weight:bold; color:#0056b3">Horário de Término:</label>
+                    <input type="time" id="chk-hora-fim" style="font-size: 1.1rem; padding: 10px;">
+                </div>
+
+                <h3>Assinatura do Técnico (TECAL)</h3>
                 <div class="signature-pad-wrapper">
                     <canvas id="signature-pad"></canvas>
                 </div>
