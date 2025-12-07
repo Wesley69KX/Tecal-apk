@@ -213,3 +213,104 @@ canvas { width: 100%; height: 100%; display: block; }
 .btn-back { background: transparent; border: 1px solid rgba(255,255,255,0.5); color: white; padding: 5px 10px; border-radius: 4px; }
 .btn-save-check { background: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; }
 .btn-clear-sig { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; }
+/* ... (MANTENHA VARIÁVEIS E HEADER DO ANTERIOR) ... */
+:root {
+    --primary: #0056b3; --secondary: #f8f9fa; --text-dark: #333; 
+    --success: #28a745; --danger: #dc3545; --warning: #ffc107; --warning-bg: #fff3cd;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: #e9ecef; margin: 0; color: var(--text-dark); padding-bottom: 30px; }
+
+/* LOGIN SCREEN */
+.login-form { display: flex; flex-direction: column; gap: 10px; margin: 20px 0; }
+.login-form input { padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; }
+.btn-login-admin { padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+.btn-login-visitor { width: 100%; padding: 12px; background: #6c757d; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+.divider-text { margin: 10px 0; color: #888; font-size: 0.9rem; }
+
+/* HEADER & BOTÕES */
+header { background: var(--primary); color: white; padding: 10px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+.header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.header-actions { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 5px; }
+h1 { margin: 0; font-size: 1.1rem; }
+.btn-checklist, .btn-global-pdf, .btn-month-pdf, .btn-sync, .btn-exit {
+    padding: 8px 12px; border: none; border-radius: 20px; font-size: 0.75rem; font-weight: bold; color: white; cursor: pointer; white-space: nowrap;
+}
+.btn-checklist { background: #28a745; }
+.btn-global-pdf { background: #17a2b8; }
+.btn-month-pdf { background: #6f42c1; }
+.btn-sync { background: #fd7e14; }
+.btn-exit { background: #dc3545; }
+
+/* CONTAINER */
+.container { padding: 10px; max-width: 800px; margin: 0 auto; }
+.search-bar { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+
+/* --- CARD VISUAL CLÁSSICO (Limpo) --- */
+.tower-list { display: flex; flex-direction: column; gap: 15px; }
+.card {
+    background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    overflow: hidden; border-left: 5px solid #ccc; position: relative;
+}
+.card.st-Operando { border-left-color: var(--success); }
+.card.st-Falha { border-left-color: var(--danger); }
+.card.st-Manutenção { border-left-color: var(--warning); }
+
+.card-header {
+    padding: 10px 15px; background: #f8f9fa; border-bottom: 1px solid #eee;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.card-header strong { font-size: 1.1rem; color: #333; }
+.status-pill { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; color: white; font-weight: bold; background: #666; }
+.st-Operando .status-pill { background: var(--success); }
+.st-Falha .status-pill { background: var(--danger); }
+.st-Manutenção .status-pill { background: var(--warning); color: #333; }
+
+.warning-alert { background: var(--warning-bg); color: #856404; padding: 5px 15px; font-size: 0.85rem; font-weight: bold; border-bottom: 1px solid #ffeeba; }
+
+.card-body { padding: 10px 15px; font-size: 0.9rem; color: #444; }
+.info-row { margin-bottom: 4px; display: flex; justify-content: space-between; }
+.info-label { font-weight: bold; color: #666; }
+.info-val { text-align: right; }
+
+.card-footer {
+    padding: 10px 15px; background: #f8f9fa; border-top: 1px solid #eee;
+    display: flex; gap: 10px; justify-content: flex-end;
+}
+.btn-card { padding: 8px 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+.btn-pdf-single { background: #6c757d; color: white; }
+.btn-edit { background: var(--primary); color: white; }
+
+/* MODAL & OUTROS */
+.modal { display: none; position: fixed; z-index: 200; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); overflow-y: auto; }
+.modal-content { background: white; margin: 5% auto; width: 95%; max-width: 600px; border-radius: 8px; padding-bottom: 60px; }
+.modal-header { padding: 15px; background: var(--primary); color: white; display: flex; justify-content: space-between; }
+.close { font-size: 24px; cursor: pointer; }
+.form-section { background: #f8f9fa; padding: 10px; margin: 10px; border: 1px solid #ddd; border-radius: 6px; }
+input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; margin-bottom: 5px;}
+.sticky-footer { position: sticky; bottom: 0; background: white; padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; }
+.btn-save { flex: 2; background: var(--success); color: white; padding: 12px; border: none; border-radius: 4px; font-weight: bold; }
+.btn-cancel { flex: 1; background: #ccc; color: #333; padding: 12px; border: none; border-radius: 4px; }
+
+/* MENU LOCALIZAÇÃO */
+.login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #e9ecef; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.login-box { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+.btn-location { width: 100%; padding: 12px; margin-bottom: 10px; background: white; border: 2px solid #eee; border-radius: 8px; text-align: left; cursor: pointer; }
+.btn-location:hover { border-color: var(--primary); background: #f0f7ff; }
+.loc-name { display: block; font-weight: bold; color: var(--primary); font-size: 1.1rem; }
+.loc-count { float: right; background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; }
+
+/* FOTOS */
+.image-preview-container { display: flex; gap: 5px; flex-wrap: wrap; }
+.img-preview { width: 60px; height: 60px; object-fit: cover; border: 1px solid #ccc; }
+.btn-delete-photo { position: absolute; top: -5px; right: -5px; background: red; color: white; border-radius: 50%; width: 20px; height: 20px; text-align: center; line-height: 20px; cursor: pointer; font-weight: bold; font-size: 12px;}
+.photo-wrapper { position: relative; margin-right: 10px; margin-bottom: 10px; }
+
+/* ASSINATURA */
+.signature-pad-wrapper { border: 2px dashed #ccc; height: 150px; background: white; }
+canvas { width: 100%; height: 100%; }
+.checklist-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f0f2f5; z-index: 200; display: flex; flex-direction: column; }
+.checklist-header { background: var(--primary); color: white; padding: 15px; display: flex; justify-content: space-between; }
+.checklist-content { flex: 1; overflow-y: auto; padding: 10px; }
+.chk-row { background: white; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ddd; }
+.chk-title { font-weight: bold; margin-bottom: 5px; }
+.radio-group { display: flex; gap: 15px; margin: 5px 0; }
