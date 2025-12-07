@@ -79,7 +79,7 @@ const app = {
     ],
 
     // =================================================================
-    // 4. INICIALIZAÇÃO E LOCAIS
+    // 4. INICIALIZAÇÃO E SELEÇÃO DE LOCAL
     // =================================================================
     selectLocation(loc) {
         this.currentLocation = loc;
@@ -98,7 +98,7 @@ const app = {
             this.db = firebase.firestore();
             await idb.open();
 
-            // Listener da Coleção Específica
+            // Listener da Coleção Específica (Tempo Real)
             this.db.collection(this.collectionName).onSnapshot((snapshot) => {
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
@@ -153,7 +153,7 @@ const app = {
         for (const t of data) await idb.put('towers', t);
     },
 
-    // --- CRIAÇÃO DE DADOS (VAZIOS PARA PREENCHIMENTO) ---
+    // --- CRIAÇÃO DE DADOS (Baseado no Local) ---
     async seedDatabase() {
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
@@ -169,25 +169,20 @@ const app = {
                 id: i,
                 nome: `ER ${idStr}`,
                 status: "Operando",
-                // Campos limpos para o usuário
-                geral: { localizacao: "", prioridade: "Média", tecnico: "", ultimaCom: "" },
+                geral: { localizacao: this.currentLocation, prioridade: "Média", tecnico: "", ultimaCom: "" },
                 falhas: { detectada: "", historico: "", acao: "" },
                 manutencao: { ultima: "", custo: "", pecas: "", proxima: "" },
                 pendencias: { servico: "", material: "" },
                 observacoes: "", fotos: [], updatedAt: nowStr
             };
-            
             this.towers.push(tower);
-
             if(batch) {
                 const docRef = this.db.collection(this.collectionName).doc(String(i));
                 batch.set(docRef, tower);
             }
         }
-        
         await idb.clear('towers');
         for(const t of this.towers) await idb.put('towers', t);
-        
         if(batch) await batch.commit();
         this.renderList();
     },
@@ -225,17 +220,15 @@ const app = {
                 material: document.getElementById('f-pend-material').value
             },
             observacoes: document.getElementById('f-obs').value,
-            fotos: this.tempPhotos, // Sem limite
+            fotos: this.tempPhotos, // Fotos ilimitadas
             updatedAt: new Date().toISOString()
         };
 
         // Salva Local
         await idb.put('towers', tower);
         
-        // Fecha Modal
+        // UI Otimista (Fecha e Atualiza já)
         this.closeModal();
-        
-        // UI Otimista
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
         this.renderList();
@@ -244,19 +237,16 @@ const app = {
         if (navigator.onLine && this.db) {
             try {
                 await this.db.collection(this.collectionName).doc(String(id)).set(tower);
-                console.log("Sincronizado.");
             } catch (error) { console.error(error); }
-        } else { console.log("Salvo offline."); }
+        }
     },
 
-    // --- RENDERIZAÇÃO ROBUSTA (CARDS COMPLETOS) ---
+    // --- RENDERIZAÇÃO (CARDS COMPLETOS) ---
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
-        if(!list || list.length === 0) {
-            container.innerHTML = '<p style="text-align:center; margin-top:20px;">Carregando...</p>';
-            return;
-        }
+        if(!list || list.length === 0) return;
+
         list.sort((a, b) => a.id - b.id);
 
         list.forEach(t => {
@@ -269,8 +259,6 @@ const app = {
                              t.status === "Falha";
                              
             const alertHTML = hasAlert ? `<div class="warning-alert">Pendências encontradas — verifique!</div>` : '';
-
-            // Helpers
             const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
             const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
             const val = (v) => (v && v.length > 0) ? v : '-';
@@ -286,7 +274,7 @@ const app = {
                         <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(t.geral.localizacao)}</span></div>
                         <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(t.geral.tecnico)}</span></div>
                         <div class="info-item"><span class="info-label">Última Manut.</span><span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
-                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDate(t.geral.ultimaCom)} ${fmtDate(t.geral.ultimaCom) !== '-' ? new Date(t.geral.ultimaCom).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : ''}</span></div>
+                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDateTime(t.geral.ultimaCom)}</span></div>
                         <div class="divider"></div>
                         <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Falha Detectada</span><span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span></div>
                         <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Pendência Material</span><span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span></div>
@@ -303,38 +291,8 @@ const app = {
         });
     },
 
-    // --- FOTOS HD E ILIMITADAS ---
-    handleImagePreview(e) { 
-        Array.from(e.target.files).forEach(file => { 
-            this.resizeImage(file, 1280, 1280, (b64) => { 
-                this.tempPhotos.push(b64); 
-                this.renderImagePreviews(); 
-            }); 
-        });
-    },
-
-    resizeImage(file, w, h, cb) { 
-        const reader = new FileReader(); reader.readAsDataURL(file);
-        reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',0.8)); }; };
-    },
-
-    renderImagePreviews() { 
-        const c = document.getElementById('image-preview-container'); c.innerHTML = '';
-        this.tempPhotos.forEach((src, i) => { 
-            const wrapper = document.createElement('div');
-            wrapper.className = 'photo-wrapper';
-            wrapper.innerHTML = `
-                <img src="${src}" class="img-preview" onclick="window.open('${src}')">
-                <div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>
-            `;
-            c.appendChild(wrapper);
-        });
-    },
-
-    removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
-
     // =================================================================
-    // 6. MÓDULO CHECKLIST
+    // 6. MÓDULO CHECKLIST (ATUALIZADO)
     // =================================================================
     openChecklist() {
         document.getElementById('checklist-screen').style.display = 'flex';
@@ -344,7 +302,6 @@ const app = {
         const now = new Date();
         document.getElementById('chk-data').valueAsDate = now;
         document.getElementById('chk-hora-inicio').value = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        
         const end = new Date(now); end.setMinutes(end.getMinutes() + 30);
         document.getElementById('chk-hora-fim').value = end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     },
@@ -388,7 +345,7 @@ const app = {
     getPos(e, canvas) { if (e.touches && e.touches.length > 0) { const rect = canvas.getBoundingClientRect(); return { offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top }; } return { offsetX: e.offsetX, offsetY: e.offsetY }; },
     clearSignature() { const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); },
 
-    // --- GERAR PDF DO CHECKLIST (COM 2 LOGOS) ---
+    // --- GERAR PDF DO CHECKLIST (CORRIGIDO) ---
     generateChecklistPDF() {
         if(!confirm("Gerar PDF do Checklist?")) return;
         const { jsPDF } = window.jspdf;
@@ -398,9 +355,11 @@ const app = {
         if (this.logoCliente && this.logoCliente.length > 100) try { doc.addImage(this.logoCliente, 'PNG', 166, 10, 30, 15); } catch(e){}
 
         doc.setFontSize(8); doc.setTextColor(0); doc.text("SOLUÇÕES EM TECNOLOGIA", 14, 30);
+        
+        // Títulos Centralizados
         doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-        doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 196, 15, null, null, "right");
-        doc.text("SISTEMA DE NOTIFICAÇÃO EM MASSA", 196, 20, null, null, "right");
+        doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 105, 15, null, null, "center");
+        doc.text("SISTEMA DE NOTIFICAÇÃO EM MASSA", 105, 20, null, null, "center");
 
         doc.setDrawColor(0); doc.setFillColor(240, 240, 240); doc.rect(14, 35, 182, 20);
         doc.setFontSize(9); doc.setFont("helvetica", "normal");
@@ -443,7 +402,7 @@ const app = {
         let finalY = doc.lastAutoTable.finalY + 20;
         if(finalY > 250) { doc.addPage(); finalY = 40; }
 
-        doc.text("Responsável Técnico (CMG):", 14, finalY);
+        doc.text("Responsável Técnico (TECAL):", 14, finalY);
         doc.text(document.getElementById('chk-ass-nome').value, 14, finalY + 7);
         
         try {
@@ -457,7 +416,7 @@ const app = {
     },
 
     // =================================================================
-    // 7. RELATÓRIOS (GERAL, MENSAL, INDIVIDUAL)
+    // 7. RELATÓRIOS GERAIS
     // =================================================================
     generateGlobalPDF() {
         if(!confirm(`Gerar relatório completo de ${this.currentLocation}?`)) return;
@@ -541,9 +500,8 @@ const app = {
         if(pageNumber) { doc.setFontSize(9); doc.setFont("times", "normal"); doc.text(`Página ${pageNumber} de ${totalPages}`, 105, 290, null, null, "center"); }
     },
 
-    generatePDF(id) { const t = this.towers.find(x => x.id == id); const { jsPDF } = window.jspdf; const doc = new jsPDF(); this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`); },
-    
     // --- FUNÇÕES UTILITÁRIAS ---
+    generatePDF(id) { const t = this.towers.find(x => x.id == id); const { jsPDF } = window.jspdf; const doc = new jsPDF(); this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`); },
     filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
     closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
     editTower(id) { 
