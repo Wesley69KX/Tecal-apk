@@ -32,9 +32,7 @@ const app = {
         measurementId: "G-LJD922VTQ4"
     },
 
-// =================================================================
-    // 3. DADOS DO CHECKLIST (COMPLETO)
-    // =================================================================
+// --- DADOS DO CHECKLIST ---
     checklistItemsData: [
         {id: "1.1", group: "Etapas Iniciais", text: "Comunicar ao CMG sobre início das atividades"},
         {id: "1.2", group: "Etapas Iniciais", text: "Abaixar o volume das remotas"},
@@ -78,97 +76,39 @@ const app = {
         {id: "8.2", group: "Finais", text: "Comunicar ao CMG sobre término"}
     ],
 
-    // =================================================================
-    // 4. INICIALIZAÇÃO E SELEÇÃO DE LOCAL
-    // =================================================================
+    // --- SELEÇÃO DE LOCAL ---
     selectLocation(loc) {
         this.currentLocation = loc;
         this.collectionName = `towers_${loc}`; 
-        
         document.getElementById('location-screen').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
         document.getElementById('current-loc-badge').innerText = loc;
-        
         this.init(); 
     },
 
     async init() {
-        try {
-            if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
-            this.db = firebase.firestore();
-            await idb.open();
-
-            // Listener da Coleção Específica (Tempo Real)
-            this.db.collection(this.collectionName).onSnapshot((snapshot) => {
-                const loading = document.getElementById('loading-msg');
-                if(loading) loading.style.display = 'none';
-                
-                if (!snapshot.empty) {
-                    const cloudData = [];
-                    snapshot.forEach(doc => cloudData.push(doc.data()));
-                    this.towers = cloudData;
-                    this.updateLocalBackup(cloudData);
-                    this.renderList();
-                } else {
-                    this.checkDataIntegrity();
-                }
-            }, (error) => {
-                console.log("Modo Offline.");
-                const loading = document.getElementById('loading-msg');
-                if(loading) loading.style.display = 'none';
-                this.loadFromLocal();
-            });
-
-        } catch (e) {
-            console.error("Erro init:", e);
-            this.loadFromLocal();
-        }
-
-        this.updateOnlineStatus();
-        window.addEventListener('online', () => this.updateOnlineStatus());
-        window.addEventListener('offline', () => this.updateOnlineStatus());
+        if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
+        this.db = firebase.firestore();
+        await idb.open();
+        this.db.collection(this.collectionName).onSnapshot((snapshot) => {
+            document.getElementById('loading-msg').style.display = 'none';
+            if (!snapshot.empty) {
+                const cloudData = []; snapshot.forEach(doc => cloudData.push(doc.data()));
+                this.towers = cloudData; this.renderList();
+            } else { this.seedDatabase(); }
+        });
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
     },
 
-    async checkDataIntegrity() {
-        const localData = await idb.getAll('towers');
-        if (localData.length > 0) {
-            this.towers = localData;
-            if(navigator.onLine) this.syncNow();
-        } else {
-            await this.seedDatabase(); 
-        }
-        this.renderList();
-    },
-
-    async loadFromLocal() {
-        document.getElementById('loading-msg').style.display = 'none';
-        this.towers = await idb.getAll('towers');
-        if(this.towers.length === 0) await this.seedDatabase();
-        this.renderList();
-    },
-
-    async updateLocalBackup(data) {
-        await idb.clear('towers');
-        for (const t of data) await idb.put('towers', t);
-    },
-
-    // --- CRIAÇÃO DE DADOS (Baseado no Local) ---
     async seedDatabase() {
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
-        
-        let totalTowers = 25; 
-        if (this.currentLocation === 'MSG') totalTowers = 7; 
-
+        let totalTowers = 25; if (this.currentLocation === 'MSG') totalTowers = 7; 
         this.towers = [];
-
         for (let i = 1; i <= totalTowers; i++) {
             const idStr = i.toString().padStart(2, '0');
             const tower = {
-                id: i,
-                nome: `ER ${idStr}`,
-                status: "Operando",
+                id: i, nome: `ER ${idStr}`, status: "Operando",
                 geral: { localizacao: this.currentLocation, prioridade: "Média", tecnico: "", ultimaCom: "" },
                 falhas: { detectada: "", historico: "", acao: "" },
                 manutencao: { ultima: "", custo: "", pecas: "", proxima: "" },
@@ -181,128 +121,32 @@ const app = {
                 batch.set(docRef, tower);
             }
         }
-        await idb.clear('towers');
-        for(const t of this.towers) await idb.put('towers', t);
+        await idb.clear('towers'); for(const t of this.towers) await idb.put('towers', t);
         if(batch) await batch.commit();
         this.renderList();
     },
 
-    // =================================================================
-    // 5. GESTÃO DE TORRES (CRUD)
-    // =================================================================
-    async saveTower(e) {
-        e.preventDefault();
-        const id = parseInt(document.getElementById('tower-id').value);
-        
-        const tower = {
-            id: id,
-            nome: document.getElementById('f-nome').value,
-            status: document.getElementById('f-status').value,
-            geral: {
-                localizacao: document.getElementById('f-geral-local').value,
-                prioridade: document.getElementById('f-geral-prio').value,
-                tecnico: document.getElementById('f-geral-tec').value,
-                ultimaCom: document.getElementById('f-geral-ultimacom').value
-            },
-            falhas: {
-                detectada: document.getElementById('f-falhas-detectada').value,
-                historico: document.getElementById('f-falhas-historico').value,
-                acao: document.getElementById('f-falhas-acao').value
-            },
-            manutencao: {
-                ultima: document.getElementById('f-manu-ultima').value,
-                proxima: document.getElementById('f-manu-proxima').value,
-                custo: document.getElementById('f-manu-custo').value,
-                pecas: document.getElementById('f-manu-pecas').value
-            },
-            pendencias: {
-                servico: document.getElementById('f-pend-servico').value,
-                material: document.getElementById('f-pend-material').value
-            },
-            observacoes: document.getElementById('f-obs').value,
-            fotos: this.tempPhotos, // Fotos ilimitadas
-            updatedAt: new Date().toISOString()
-        };
-
-        // Salva Local
-        await idb.put('towers', tower);
-        
-        // UI Otimista (Fecha e Atualiza já)
-        this.closeModal();
-        const index = this.towers.findIndex(t => t.id === id);
-        if(index !== -1) this.towers[index] = tower;
-        this.renderList();
-
-        // Envia Nuvem
-        if (navigator.onLine && this.db) {
-            try {
-                await this.db.collection(this.collectionName).doc(String(id)).set(tower);
-            } catch (error) { console.error(error); }
-        }
-    },
-
-    // --- RENDERIZAÇÃO (CARDS COMPLETOS) ---
     renderList(list = this.towers) {
-        const container = document.getElementById('tower-list');
-        container.innerHTML = '';
+        const container = document.getElementById('tower-list'); container.innerHTML = '';
         if(!list || list.length === 0) return;
-
         list.sort((a, b) => a.id - b.id);
-
         list.forEach(t => {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
-            
-            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
-                             (t.pendencias.servico && t.pendencias.servico.length > 1) || 
-                             (t.falhas.detectada && t.falhas.detectada.length > 1) ||
-                             t.status === "Falha";
-                             
-            const alertHTML = hasAlert ? `<div class="warning-alert">Pendências encontradas — verifique!</div>` : '';
-            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
-            const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR') : '-';
-            const val = (v) => (v && v.length > 0) ? v : '-';
-
-            div.innerHTML = `
-                <div class="card-header">
-                    <div class="card-title">🗼 ${t.nome}</div>
-                    <div class="card-status">${t.status}</div>
-                </div>
-                ${alertHTML}
-                <div class="card-body">
-                    <div class="info-grid">
-                        <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(t.geral.localizacao)}</span></div>
-                        <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(t.geral.tecnico)}</span></div>
-                        <div class="info-item"><span class="info-label">Última Manut.</span><span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
-                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDateTime(t.geral.ultimaCom)}</span></div>
-                        <div class="divider"></div>
-                        <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Falha Detectada</span><span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span></div>
-                        <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Pendência Material</span><span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span></div>
-                    </div>
-                    ${t.observacoes ? `<div class="obs-text">"${t.observacoes}"</div>` : ''}
-                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; font-size:0.85rem; color:#0056b3; font-weight:bold;">📷 ${t.fotos.length} fotos anexadas</div>` : ''}
-                </div>
-                <div class="card-footer">
-                    <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">📄 PDF</button>
-                    <button class="btn-card btn-edit" onclick="app.editTower(${t.id})">✏️ Editar</button>
-                </div>
-            `;
+            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || t.status === "Falha";
+            div.innerHTML = `<div class="card-header"><strong>🔔 ${t.nome}</strong><span class="status-pill">${t.status}</span></div>${hasAlert ? '<div class="warning-alert">⚠️ Pendências</div>' : ''}<div class="card-body"><div class="info-grid"><div class="info-item"><span class="info-label">Local</span><span>${t.geral.localizacao||'-'}</span></div></div></div><div class="card-footer"><button class="btn-card btn-edit" onclick="app.editTower(${t.id})">Editar</button></div>`;
             container.appendChild(div);
         });
     },
 
-    // =================================================================
-    // 6. MÓDULO CHECKLIST (ATUALIZADO)
-    // =================================================================
+    // --- CHECKLIST ---
     openChecklist() {
         document.getElementById('checklist-screen').style.display = 'flex';
         this.renderChecklistForm();
         this.setupSignaturePad();
-        
-        const now = new Date();
-        document.getElementById('chk-data').valueAsDate = now;
-        document.getElementById('chk-hora-inicio').value = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        const end = new Date(now); end.setMinutes(end.getMinutes() + 30);
+        document.getElementById('chk-data').valueAsDate = new Date();
+        document.getElementById('chk-hora-inicio').value = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const end = new Date(); end.setMinutes(end.getMinutes() + 30);
         document.getElementById('chk-hora-fim').value = end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     },
 
@@ -345,23 +189,48 @@ const app = {
     getPos(e, canvas) { if (e.touches && e.touches.length > 0) { const rect = canvas.getBoundingClientRect(); return { offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top }; } return { offsetX: e.offsetX, offsetY: e.offsetY }; },
     clearSignature() { const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); },
 
-    // --- GERAR PDF DO CHECKLIST (CORRIGIDO) ---
-    generateChecklistPDF() {
+    // =================================================================
+    // FUNÇÃO INTELIGENTE PARA LOGO (ANTISTRETCH)
+    // =================================================================
+    async drawSmartLogo(doc, base64, x, y, maxW, maxH) {
+        if (!base64 || base64.length < 100) return;
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.src = base64;
+            img.onload = () => {
+                const ratio = img.width / img.height;
+                let newW = maxW;
+                let newH = maxW / ratio;
+                if (newH > maxH) { newH = maxH; newW = maxH * ratio; }
+                
+                // Centraliza no box
+                const finalX = x + (maxW - newW) / 2;
+                const finalY = y + (maxH - newH) / 2;
+                
+                try { doc.addImage(base64, 'PNG', finalX, finalY, newW, newH); } catch(e){}
+                resolve();
+            };
+            img.onerror = resolve; 
+        });
+    },
+
+    // --- GERAR PDF DO CHECKLIST ---
+    async generateChecklistPDF() {
         if(!confirm("Gerar PDF do Checklist?")) return;
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
 
-        if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 14, 10, 30, 15); } catch(e){}
-        if (this.logoCliente && this.logoCliente.length > 100) try { doc.addImage(this.logoCliente, 'PNG', 166, 10, 30, 15); } catch(e){}
+        // Logos Inteligentes (Não esticam)
+        await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 40, 20);
+        await this.drawSmartLogo(doc, this.logoCliente, 156, 10, 40, 20);
 
-        doc.setFontSize(8); doc.setTextColor(0); doc.text("SOLUÇÕES EM TECNOLOGIA", 14, 30);
+        doc.setFontSize(8); doc.setTextColor(0); doc.text("SOLUÇÕES EM TECNOLOGIA", 14, 35);
         
-        // Títulos Centralizados
         doc.setFont("helvetica", "bold"); doc.setFontSize(10);
         doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 105, 15, null, null, "center");
         doc.text("SISTEMA DE NOTIFICAÇÃO EM MASSA", 105, 20, null, null, "center");
 
-        doc.setDrawColor(0); doc.setFillColor(240, 240, 240); doc.rect(14, 35, 182, 20);
+        doc.setDrawColor(0); doc.setFillColor(240, 240, 240); doc.rect(14, 38, 182, 20);
         doc.setFontSize(9); doc.setFont("helvetica", "normal");
         
         const data = document.getElementById('chk-data').value;
@@ -371,10 +240,10 @@ const app = {
         const veiculo = document.getElementById('chk-recurso').value;
         const exec = document.getElementById('chk-executantes').value;
 
-        doc.text(`UNIDADE: ${this.currentLocation}   |   DATA: ${data}`, 16, 42);
-        doc.text(`INÍCIO: ${horaIni}   |   TÉRMINO: ${horaFim}`, 16, 48);
-        doc.text(`CLIMA: ${clima}   |   RECURSO: ${veiculo}`, 120, 42);
-        doc.text(`EXECUTANTES: ${exec}`, 16, 54);
+        doc.text(`UNIDADE: ${this.currentLocation}   |   DATA: ${data}`, 16, 45);
+        doc.text(`INÍCIO: ${horaIni}   |   TÉRMINO: ${horaFim}`, 16, 51);
+        doc.text(`CLIMA: ${clima}   |   RECURSO: ${veiculo}`, 120, 45);
+        doc.text(`EXECUTANTES: ${exec}`, 16, 57);
 
         const tableBody = [];
         this.checklistItemsData.forEach(item => {
@@ -384,7 +253,7 @@ const app = {
         });
 
         doc.autoTable({
-            startY: 60,
+            startY: 65,
             head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']],
             body: tableBody,
             theme: 'grid',
@@ -415,15 +284,13 @@ const app = {
         doc.save(`Checklist_${this.currentLocation}_${data}.pdf`);
     },
 
-    // =================================================================
-    // 7. RELATÓRIOS GERAIS
-    // =================================================================
-    generateGlobalPDF() {
+    // --- RELATÓRIOS GERAIS (COM LOGO INTELIGENTE) ---
+    async generateGlobalPDF() {
         if(!confirm(`Gerar relatório completo de ${this.currentLocation}?`)) return;
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         
-        if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 75, 30, 60, 30); } catch (e) {}
+        await this.drawSmartLogo(doc, this.logoEmpresa, 75, 30, 60, 30);
 
         doc.setFont("times", "bold"); doc.setFontSize(18);
         let y = 90;
@@ -444,12 +311,16 @@ const app = {
         const mes = hoje.toLocaleString('pt-BR', { month: 'long' });
         doc.text(`${mes.charAt(0).toUpperCase() + mes.slice(1)} de ${hoje.getFullYear()}`, 105, 260, null, null, "center");
 
+        // Loop Async para desenhar páginas corretamente
         const lista = [...this.towers].sort((a,b) => a.id - b.id);
-        lista.forEach((t, i) => { doc.addPage(); this.drawTowerPage(doc, t, i + 1, lista.length); });
+        for(let i=0; i<lista.length; i++) {
+            doc.addPage();
+            await this.drawTowerPage(doc, lista[i], i+1, lista.length);
+        }
         doc.save(`Relatorio_${this.currentLocation}_${new Date().toISOString().slice(0,10)}.pdf`);
     },
 
-    generateMonthlyPDF() {
+    async generateMonthlyPDF() {
         const input = prompt("Mês/Ano (ex: 12/2025):"); if (!input) return;
         const [mes, ano] = input.split('/'); if (!mes || !ano) return alert("Erro no formato.");
         const filtered = this.towers.filter(t => {
@@ -459,18 +330,24 @@ const app = {
         });
         if (filtered.length === 0) return alert("Sem registros.");
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
-        if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 75, 20, 60, 30); } catch (e) {}
+        
+        await this.drawSmartLogo(doc, this.logoEmpresa, 75, 20, 60, 30);
+        
         doc.setFont("times", "bold"); doc.setFontSize(18);
         doc.text("RELATÓRIO MENSAL", 105, 80, null, null, "center");
         doc.text(`Período: ${input} - ${this.currentLocation}`, 105, 100, null, null, "center");
-        filtered.forEach((t, i) => { doc.addPage(); this.drawTowerPage(doc, t, i + 1, filtered.length); });
+        
+        for(let i=0; i<filtered.length; i++) {
+            doc.addPage();
+            await this.drawTowerPage(doc, filtered[i], i+1, filtered.length);
+        }
         doc.save(`Relatorio_Mensal_${mes}_${ano}.pdf`);
     },
 
-    drawTowerPage(doc, t, pageNumber, totalPages) {
+    async drawTowerPage(doc, t, pageNumber, totalPages) {
         doc.setFont("times", "roman");
-        if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 14, 10, 30, 15); } catch (e) {}
-        else doc.setFontSize(10), doc.text("TECAL", 14, 20);
+        await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
+        
         doc.setFontSize(10); doc.setTextColor(80);
         doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 15, null, null, "right");
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 20, null, null, "right");
@@ -493,46 +370,51 @@ const app = {
         drawSection("Geral", t.geral); drawSection("Falhas", t.falhas); drawSection("Manutenção", t.manutencao); drawSection("Pendências", t.pendencias);
         if(t.observacoes) { doc.setFont("times", "bold"); doc.text("Observações", 14, y); y+=6; doc.setFont("times", "italic"); doc.text(doc.splitTextToSize(t.observacoes, 180), 14, y); }
         if(t.fotos.length > 0) {
-            doc.addPage(); y=30; if (this.logoEmpresa.length > 100) try { doc.addImage(this.logoEmpresa, 'PNG', 14, 10, 20, 10); } catch (e) {}
+            doc.addPage(); y=30; 
+            await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
             doc.setFont("times", "bold"); doc.text("Registro Fotográfico", 105, y, null, null, "center"); y+=15;
-            t.fotos.forEach((f) => { if(y>200) { doc.addPage(); y=30; } try { doc.addImage(f, 'JPEG', 35, y, 140, 100); y+=105; } catch(e){} });
+            for(const f of t.fotos) {
+                if(y>200) { doc.addPage(); y=30; }
+                // Fotos usam o mesmo sistema Smart para não esticar
+                await this.drawSmartLogo(doc, f, 35, y, 140, 100); 
+                y+=105;
+            }
         }
         if(pageNumber) { doc.setFontSize(9); doc.setFont("times", "normal"); doc.text(`Página ${pageNumber} de ${totalPages}`, 105, 290, null, null, "center"); }
     },
 
+    async generatePDF(id) { 
+        const t = this.towers.find(x => x.id == id);
+        const { jsPDF } = window.jspdf; const doc = new jsPDF(); 
+        await this.drawTowerPage(doc, t, 1, 1); 
+        doc.save(`${t.nome}.pdf`); 
+    },
+
     // --- FUNÇÕES UTILITÁRIAS ---
-    generatePDF(id) { const t = this.towers.find(x => x.id == id); const { jsPDF } = window.jspdf; const doc = new jsPDF(); this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`); },
-    filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
-    closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
+    saveTower(e) { 
+        e.preventDefault(); const id = parseInt(document.getElementById('tower-id').value);
+        const tower = { id: id, nome: document.getElementById('f-nome').value, status: document.getElementById('f-status').value, geral: { localizacao: document.getElementById('f-geral-local').value, prioridade: document.getElementById('f-geral-prio').value, tecnico: document.getElementById('f-geral-tec').value, ultimaCom: document.getElementById('f-geral-ultimacom').value }, falhas: { detectada: document.getElementById('f-falhas-detectada').value, historico: document.getElementById('f-falhas-historico').value, acao: document.getElementById('f-falhas-acao').value }, manutencao: { ultima: document.getElementById('f-manu-ultima').value, proxima: document.getElementById('f-manu-proxima').value, custo: document.getElementById('f-manu-custo').value, pecas: document.getElementById('f-manu-pecas').value }, pendencias: { servico: document.getElementById('f-pend-servico').value, material: document.getElementById('f-pend-material').value }, observacoes: document.getElementById('f-obs').value, fotos: this.tempPhotos, updatedAt: new Date().toISOString() };
+        this.db.collection(this.collectionName).doc(String(id)).set(tower); this.closeModal();
+    },
     editTower(id) { 
         const t = this.towers.find(x => x.id == id); if(!t) return;
         this.tempPhotos = [...t.fotos] || [];
         document.getElementById('tower-form').reset();
         document.getElementById('image-preview-container').innerHTML = '';
-        document.getElementById('tower-id').value = t.id;
-        document.getElementById('f-nome').value = t.nome;
-        document.getElementById('f-status').value = t.status;
-        document.getElementById('f-geral-local').value = t.geral.localizacao;
-        document.getElementById('f-geral-prio').value = t.geral.prioridade;
-        document.getElementById('f-geral-tec').value = t.geral.tecnico;
-        document.getElementById('f-geral-ultimacom').value = t.geral.ultimaCom;
-        document.getElementById('f-falhas-detectada').value = t.falhas.detectada;
-        document.getElementById('f-falhas-historico').value = t.falhas.historico;
-        document.getElementById('f-falhas-acao').value = t.falhas.acao;
-        document.getElementById('f-manu-ultima').value = t.manutencao.ultima;
-        document.getElementById('f-manu-proxima').value = t.manutencao.proxima;
-        document.getElementById('f-manu-custo').value = t.manutencao.custo;
-        document.getElementById('f-manu-pecas').value = t.manutencao.pecas;
-        document.getElementById('f-pend-servico').value = t.pendencias.servico;
-        document.getElementById('f-pend-material').value = t.pendencias.material;
+        document.getElementById('tower-id').value = t.id; document.getElementById('f-nome').value = t.nome; document.getElementById('f-status').value = t.status;
+        document.getElementById('f-geral-local').value = t.geral.localizacao; document.getElementById('f-geral-prio').value = t.geral.prioridade; document.getElementById('f-geral-tec').value = t.geral.tecnico; document.getElementById('f-geral-ultimacom').value = t.geral.ultimaCom;
+        document.getElementById('f-falhas-detectada').value = t.falhas.detectada; document.getElementById('f-falhas-historico').value = t.falhas.historico; document.getElementById('f-falhas-acao').value = t.falhas.acao;
+        document.getElementById('f-manu-ultima').value = t.manutencao.ultima; document.getElementById('f-manu-proxima').value = t.manutencao.proxima; document.getElementById('f-manu-custo').value = t.manutencao.custo; document.getElementById('f-manu-pecas').value = t.manutencao.pecas;
+        document.getElementById('f-pend-servico').value = t.pendencias.servico; document.getElementById('f-pend-material').value = t.pendencias.material;
         document.getElementById('f-obs').value = t.observacoes;
-        this.renderImagePreviews();
-        document.getElementById('modal').style.display = 'block';
+        this.renderImagePreviews(); document.getElementById('modal').style.display = 'block';
     },
     handleImagePreview(e) { Array.from(e.target.files).forEach(file => { this.resizeImage(file, 1280, 1280, (b64) => { this.tempPhotos.push(b64); this.renderImagePreviews(); }); }); },
     resizeImage(file, w, h, cb) { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',0.8)); }; }; },
-    renderImagePreviews() { const c = document.getElementById('image-preview-container'); c.innerHTML = ''; this.tempPhotos.forEach((src, i) => { const d = document.createElement('div'); d.className = 'photo-wrapper'; d.innerHTML = `<img src="${src}" class="img-preview" onclick="window.open('${src}')"><div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>`; c.appendChild(d); }); },
+    renderImagePreviews() { const c = document.getElementById('image-preview-container'); c.innerHTML = ''; this.tempPhotos.forEach((src, i) => { const d = document.createElement('div'); d.className='photo-wrapper'; d.innerHTML = `<img src="${src}" class="img-preview" onclick="window.open('${src}')"><div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>`; c.appendChild(d); }); },
     removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
-    updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; },
-    syncNow() { if(navigator.onLine && this.db) { this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t)); alert("Sincronizando..."); } else { alert("Sem internet."); } }
+    syncNow() { window.location.reload(); },
+    filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
+    closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
+    updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; }
 };
