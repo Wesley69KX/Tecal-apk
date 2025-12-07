@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestao-torres-v16'; // Mudamos para v3 para forçar atualização
+const CACHE_NAME = 'gestao-torres-v17'; // Mudamos para v3 para forçar atualização
 const ASSETS = [
   '/',
   '/index.html',
