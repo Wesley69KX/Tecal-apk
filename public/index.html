@@ -20,12 +20,16 @@
 
     <div id="location-screen" class="login-overlay">
         <div class="login-box">
-            <h2>📍 Selecione a Unidade</h2>
-            <p>Onde você vai trabalhar hoje?</p>
-            <button class="btn-location" onclick="app.selectLocation('QUEIROZ')">Queiroz - Raposos<small>(25 Torres)</small></button>
-            <button class="btn-location" onclick="app.selectLocation('CUIABA')">Cuiabá - Sabará<small>(25 Torres)</small></button>
-            <button class="btn-location" onclick="app.selectLocation('MSG')">MSG - Crixás<small>(07 Torres)</small></button>
-            <button class="btn-location" onclick="app.selectLocation('CDS')">CDS - Santa Bárbara<small>(25 Torres)</small></button>
+            <div class="menu-header">
+                <h2>📍 Selecione a Unidade</h2>
+                <p>Onde você vai atuar hoje?</p>
+            </div>
+            <div class="menu-buttons">
+                <button class="btn-location" onclick="app.selectLocation('QUEIROZ')"><span class="loc-name">Queiroz</span><span class="loc-city">Raposos - MG</span><span class="loc-count">25 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('CUIABA')"><span class="loc-name">Cuiabá</span><span class="loc-city">Sabará - MG</span><span class="loc-count">25 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('MSG')"><span class="loc-name">MSG</span><span class="loc-city">Crixás - GO</span><span class="loc-count">07 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('CDS')"><span class="loc-name">CDS</span><span class="loc-city">Santa Bárbara - MG</span><span class="loc-count">25 Torres</span></button>
+            </div>
         </div>
     </div>
 
@@ -38,7 +42,7 @@
                 <button class="btn-action btn-checklist" onclick="app.openChecklist()">📋 Checklist</button>
                 <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Geral</button>
                 <button class="btn-month-pdf" onclick="app.generateMonthlyPDF()">📅 Mensal</button>
-                <button class="btn-sync" onclick="app.syncNow()">🔄</button>
+                <button class="btn-sync" onclick="app.syncNow()">🔄 Sync</button>
                 <button class="btn-exit" onclick="window.location.reload()">Sair</button>
             </div>
         </header>
@@ -62,7 +66,10 @@
                 <h3>Dados Iniciais</h3>
                 <div class="two-col">
                     <div><label>Data</label><input type="date" id="chk-data"></div>
-                    <div><label>Horário Início</label><input type="time" id="chk-hora-inicio"></div>
+                    <div style="display:flex; gap:5px;">
+                        <div style="flex:1"><label>Início</label><input type="time" id="chk-hora-inicio"></div>
+                        <div style="flex:1"><label>Término</label><input type="time" id="chk-hora-fim"></div>
+                    </div>
                 </div>
                 <div class="two-col">
                     <div><label>Clima</label><select id="chk-clima"><option>Ensolarado</option><option>Nublado</option><option>Chuvoso</option></select></div>
@@ -79,7 +86,6 @@
                     <canvas id="signature-pad"></canvas>
                 </div>
                 <button type="button" class="btn-clear-sig" onclick="app.clearSignature()">Limpar Assinatura</button>
-                
                 <label style="margin-top:10px">Nome Legível</label><input type="text" id="chk-ass-nome">
                 <label>Matrícula</label><input type="text" id="chk-ass-mat">
             </div>
