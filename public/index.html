@@ -21,14 +21,16 @@
 
     <div id="login-screen" class="login-overlay">
         <div class="login-box">
+            <img id="login-logo-view" class="login-logo-img" alt="Logo" style="display:none;">
+            
             <div class="menu-header">
                 <h2>🔐 Acesso ao Sistema</h2>
                 <p>Identifique-se para continuar</p>
             </div>
             
             <div class="login-form">
-                <input type="text" id="login-user" placeholder="Usuário (Ex: TECALADM)">
-                <input type="password" id="login-pass" placeholder="Senha" inputmode="text">
+                <input type="text" id="login-user" placeholder="Usuário">
+                <input type="password" id="login-pass" placeholder="Senha">
                 <button class="btn-login-admin" onclick="app.checkLogin()">Entrar como Admin</button>
             </div>
 
@@ -60,7 +62,6 @@
             </div>
             <div class="header-actions">
                 <button id="btn-new-checklist" class="btn-action btn-checklist" onclick="app.openChecklist()">📋 Checklist</button>
-                
                 <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Geral</button>
                 <button class="btn-month-pdf" onclick="app.generateMonthlyPDF()">📅 Mensal</button>
                 <button class="btn-sync" onclick="app.syncNow()">🔄</button>
