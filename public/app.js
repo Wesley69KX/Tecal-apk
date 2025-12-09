@@ -81,7 +81,6 @@ const app = {
     // 3. INICIALIZAÇÃO
     // =================================================================
     initApp() {
-        console.log("App Iniciado");
         if(this.logoEmpresa && this.logoEmpresa.length > 100) {
             const img = document.getElementById('login-logo-view');
             if(img) {
@@ -117,7 +116,6 @@ const app = {
     },
 
     selectLocation(loc) {
-        console.log("Selecionando Local:", loc);
         this.currentLocation = loc;
         this.collectionName = `towers_${loc}`; 
         document.getElementById('location-screen').style.display = 'none';
@@ -127,18 +125,12 @@ const app = {
     },
 
     // =================================================================
-    // 4. LÓGICA DE DADOS (CORRIGIDA)
+    // 4. LÓGICA DE DADOS (INTEGRIDADE E FIREBASE)
     // =================================================================
     async init() {
         try {
-            console.log("Inicializando Banco de Dados...");
-            
-            // 1. Inicializa Firebase
             if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
             this.db = firebase.firestore();
-
-            // 2. Inicializa Banco Local (IndexedDB) - CORREÇÃO PRINCIPAL
-            // Cria a tabela 'towers' se não existir
             this.dbLocal = await idb.openDB('gestao-torres-db', 1, {
                 upgrade(db) {
                     if (!db.objectStoreNames.contains('towers')) {
@@ -146,15 +138,12 @@ const app = {
                     }
                 },
             });
-            console.log("Banco Local (IDB) Conectado.");
 
-            // 3. Listener Tempo Real do Firebase
             this.db.collection(this.collectionName).onSnapshot((snapshot) => {
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 
                 if (!snapshot.empty) {
-                    console.log("Dados recebidos da Nuvem. Atualizando...");
                     const cloudData = [];
                     snapshot.forEach(doc => {
                         let data = doc.data();
@@ -166,19 +155,18 @@ const app = {
                     this.updateLocalBackup(cloudData);
                     this.renderList();
                 } else {
-                    console.log("Nuvem vazia. Verificando integridade ou criando dados...");
                     this.checkDataIntegrity();
                 }
             }, (error) => {
-                console.warn("Modo Offline ou Erro de Permissão:", error);
+                console.log("Modo Offline.");
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 this.loadFromLocal();
             });
 
         } catch (e) {
-            console.error("ERRO FATAL NO INIT:", e);
-            alert("Erro ao iniciar sistema: " + e.message);
+            console.error("Erro init:", e);
+            this.loadFromLocal();
         }
 
         this.updateOnlineStatus();
@@ -188,17 +176,13 @@ const app = {
     },
 
     async checkDataIntegrity() {
-        // Verifica se já existem dados locais PARA ESSA LOCALIDADE
         const allData = await this.dbLocal.getAll('towers');
         const currentLocData = allData.filter(t => t._collection === this.collectionName);
 
         if (currentLocData.length > 0) {
-            console.log("Usando dados locais.");
             this.towers = currentLocData;
-            // Se tiver dados locais mas o Firebase estiver vazio, sincroniza pra cima (upload)
             if(navigator.onLine && this.userRole === 'admin') this.syncNow();
         } else {
-            console.log("Sem dados locais nem na nuvem. Criando Seed...");
             await this.seedDatabase(); 
         }
         this.renderList();
@@ -206,7 +190,7 @@ const app = {
 
     async loadFromLocal() {
         document.getElementById('loading-msg').style.display = 'none';
-        if (!this.dbLocal) return; // Segurança
+        if (!this.dbLocal) return;
 
         const allData = await this.dbLocal.getAll('towers');
         this.towers = allData.filter(t => t._collection === this.collectionName);
@@ -217,13 +201,10 @@ const app = {
 
     async updateLocalBackup(data) {
         if (!this.dbLocal) return;
-
-        // Pega tudo para não apagar outras cidades
         const allData = await this.dbLocal.getAll('towers');
         const otherLocationsData = allData.filter(t => t._collection !== this.collectionName);
         const newDataToSave = [...otherLocationsData, ...data];
 
-        // Transação para salvar
         const tx = this.dbLocal.transaction('towers', 'readwrite');
         await tx.store.clear();
         for (const t of newDataToSave) {
@@ -232,9 +213,7 @@ const app = {
         await tx.done;
     },
 
-    // CRIAÇÃO INICIAL DAS TORRES
     async seedDatabase() {
-        console.log("Executando SeedDatabase para", this.collectionName);
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
         
@@ -249,8 +228,8 @@ const app = {
         for (let i = 1; i <= totalTowers; i++) {
             const idStr = i.toString().padStart(2, '0');
             const tower = {
-                id: i, // ID simples (1, 2, 3...)
-                _collection: this.collectionName, 
+                id: i,
+                _collection: this.collectionName,
                 nome: `ER ${idStr}`,
                 status: "Operando",
                 geral: { localizacao: "", prioridade: "Média", tecnico: "", ultimaCom: "" },
@@ -262,24 +241,15 @@ const app = {
             this.towers.push(tower);
 
             if(batch && this.userRole === 'admin') {
-                // IDs no Firebase devem ser únicos globalmente ou dentro da coleção
-                // Aqui usamos o ID numérico como chave do documento
                 const docRef = this.db.collection(this.collectionName).doc(String(i));
                 batch.set(docRef, tower);
             }
         }
         
-        // Salva backup local
         await this.updateLocalBackup(this.towers);
         
-        // Envia para o Firebase
         if(batch && this.userRole === 'admin') {
-            try { 
-                await batch.commit(); 
-                console.log(`Sucesso! Banco de dados criado no Firebase.`);
-            } catch(e) { 
-                console.error("Erro ao salvar no Firebase:", e); 
-            }
+            try { await batch.commit(); } catch(e) { console.log("Salvo apenas localmente (Offline)"); }
         }
         this.renderList();
     },
@@ -290,11 +260,7 @@ const app = {
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
-        
-        if(!list || list.length === 0) {
-            container.innerHTML = '<p style="text-align:center; width:100%; color:#666;">Nenhuma torre encontrada.</p>';
-            return;
-        }
+        if(!list || list.length === 0) return;
 
         list.sort((a, b) => a.id - b.id);
 
@@ -302,9 +268,9 @@ const app = {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
             
-            const hasAlert = (t.pendencias && t.pendencias.material && t.pendencias.material.length > 1) || 
-                             (t.pendencias && t.pendencias.servico && t.pendencias.servico.length > 1) || 
-                             (t.falhas && t.falhas.detectada && t.falhas.detectada.length > 1) ||
+            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
+                             (t.pendencias.servico && t.pendencias.servico.length > 1) || 
+                             (t.falhas.detectada && t.falhas.detectada.length > 1) ||
                              t.status === "Falha";
             
             const alertHTML = hasAlert ? `<div class="warning-alert">⚠️ Pendências encontradas</div>` : '';
@@ -342,7 +308,7 @@ const app = {
                         </div>
                     </div>
                     ${t.observacoes ? `<div class="obs-box">"${t.observacoes}"</div>` : ''}
-                    ${t.fotos && t.fotos.length > 0 ? `<div style="margin-top:10px; color:blue; font-weight:bold">📷 ${t.fotos.length} fotos</div>` : ''}
+                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; color:blue; font-weight:bold">📷 ${t.fotos.length} fotos</div>` : ''}
                 </div>
                 <div class="card-footer">
                     <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">PDF</button>
@@ -366,7 +332,7 @@ const app = {
         
         const tower = {
             id: id,
-            _collection: this.collectionName,
+            _collection: this.collectionName, // Garante integridade
             nome: document.getElementById('f-nome').value,
             status: document.getElementById('f-status').value,
             geral: {
@@ -405,12 +371,12 @@ const app = {
 
         if (navigator.onLine && this.db) {
             try { await this.db.collection(this.collectionName).doc(String(id)).set(tower); }
-            catch (error) { console.error("Erro ao salvar no Firebase:", error); }
+            catch (error) { console.error(error); }
         }
     },
 
     // =================================================================
-    // 7. GERAÇÃO DE PDFS
+    // 7. GERAÇÃO DE PDFS (COM LOGO DA ANGLO EM TODOS)
     // =================================================================
     async drawSmartLogo(doc, base64, x, y, maxW, maxH) {
         if (!base64 || base64.length < 100) return;
@@ -430,7 +396,9 @@ const app = {
         if(!confirm(`Gerar relatório completo de ${this.currentLocation}?`)) return;
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
         
+        // CAPA - Duas Logos
         await this.drawSmartLogo(doc, this.logoEmpresa, 75, 30, 60, 30);
+        await this.drawSmartLogo(doc, this.logoCliente, 140, 30, 50, 25);
 
         doc.setFont("times", "bold"); doc.setFontSize(18);
         let y = 90;
@@ -471,7 +439,10 @@ const app = {
         if (filtered.length === 0) return alert("Sem registros.");
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
         
-        await this.drawSmartLogo(doc, this.logoEmpresa, 75, 20, 60, 30);
+        // CAPA - Duas Logos
+        await this.drawSmartLogo(doc, this.logoEmpresa, 65, 20, 50, 25);
+        await this.drawSmartLogo(doc, this.logoCliente, 120, 20, 50, 25);
+
         doc.setFont("times", "bold"); doc.setFontSize(18);
         doc.text("RELATÓRIO MENSAL", 105, 80, null, null, "center");
         doc.text(`Período: ${input} - ${this.currentLocation}`, 105, 100, null, null, "center");
@@ -485,13 +456,20 @@ const app = {
 
     async drawTowerPage(doc, t, pageNumber, totalPages) {
         doc.setFont("times", "roman");
+        
+        // LOGO ESQUERDA (TECAL)
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         
+        // LOGO DIREITA (ANGLO) - ADICIONADA AQUI!
+        await this.drawSmartLogo(doc, this.logoCliente, 160, 10, 35, 15);
+        
         doc.setFontSize(10); doc.setTextColor(80);
-        doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 15, null, null, "right");
-        doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 20, null, null, "right");
-        doc.setDrawColor(0); doc.line(14, 28, 196, 28);
-        let y = 40; doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
+        doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 30, null, null, "right");
+        doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 35, null, null, "right");
+        
+        doc.setDrawColor(0); doc.line(14, 38, 196, 38);
+        
+        let y = 50; doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
         doc.text(`Detalhes: ${t.nome}`, 105, y, null, null, "center"); y += 15;
         
         const drawSection = (title, obj) => {
@@ -515,6 +493,7 @@ const app = {
         if(t.fotos && t.fotos.length > 0) {
             doc.addPage(); y=30; 
             await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
+            await this.drawSmartLogo(doc, this.logoCliente, 160, 10, 35, 15);
             doc.setFont("times", "bold"); doc.text("Registro Fotográfico", 105, y, null, null, "center"); y+=15;
             for(const f of t.fotos) {
                 if(y>200) { doc.addPage(); y=30; }
@@ -577,11 +556,12 @@ const app = {
         if(!confirm("Gerar PDF?")) return;
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
 
-        // LOGOS
+        // LOGOS (ESQUERDA E DIREITA)
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         await this.drawSmartLogo(doc, this.logoCliente, 146, 10, 50, 25);
 
-        doc.setFontSize(8); doc.setTextColor(0); doc.text("SOLUÇÕES EM TECNOLOGIA", 14, 30);
+        // REMOVIDO: doc.text("SOLUÇÕES EM TECNOLOGIA", ...);
+        
         doc.setFont("helvetica", "bold"); doc.setFontSize(10);
         doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 105, 15, null, null, "center");
         doc.text("SISTEMA DE NOTIFICAÇÃO EM MASSA", 105, 20, null, null, "center");
