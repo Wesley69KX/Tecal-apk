@@ -29,7 +29,45 @@ const app = {
         measurementId: "G-LJD922VTQ4"
     },
 
-// --- DADOS DO CHECKLIST ---
+Aqui está o código completo do app.js.
+
+Eu removi os base64 longos das logos (deixando vazio como pediu) e apliquei todas as correções de lógica para impedir que os dados de uma cidade apareçam em outra.
+
+JavaScript
+
+const app = {
+    // --- ESTADO DO APP ---
+    towers: [], tempPhotos: [], db: null,
+    currentLocation: "", collectionName: "",
+    
+    // --- CONTROLE DE ACESSO ---
+    userRole: "", 
+    adminUser: "Adm",
+    adminPass: "Tecal123",
+    
+    // --- CHECKLIST ---
+    signaturePad: null, isDrawing: false,
+
+    // =================================================================
+    // 1. LOGOS (COLOQUE SEUS BASE64 AQUI DEPOIS)
+    // =================================================================
+    logoEmpresa: "", // Cole o base64 da Tecal aqui
+    logoCliente: "", // Cole o base64 da Anglogold aqui
+
+    // =================================================================
+    // 2. CONFIGURAÇÃO FIREBASE
+    // =================================================================
+    firebaseConfig: {
+        apiKey: "AIzaSyCvnPi_4kZdyMjsbcfiIeaM0Qid8qDDyyg",
+        authDomain: "gestao-torres-v2.firebaseapp.com",
+        projectId: "gestao-torres-v2",
+        storageBucket: "gestao-torres-v2.firebasestorage.app",
+        messagingSenderId: "728720990458",
+        appId: "1:728720990458:web:b48fc14eb41be2ad732943",
+        measurementId: "G-LJD922VTQ4"
+    },
+
+    // --- DADOS DO CHECKLIST ---
     checklistItemsData: [
         {id: "1.1", group: "Etapas Iniciais", text: "Comunicar ao CMG sobre início das atividades"},
         {id: "1.2", group: "Etapas Iniciais", text: "Abaixar o volume das remotas"},
@@ -105,7 +143,6 @@ const app = {
     showLocationScreen() {
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('location-screen').style.display = 'flex';
-        // Se for visitante, esconde botão de checklist
         if(this.userRole === 'visitor') {
             const btn = document.getElementById('btn-new-checklist');
             if(btn) btn.style.display = 'none';
@@ -121,6 +158,9 @@ const app = {
         this.init(); 
     },
 
+    // =================================================================
+    // 4. LÓGICA DE DADOS (COM CORREÇÃO DE INTEGRIDADE)
+    // =================================================================
     async init() {
         try {
             if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
@@ -134,7 +174,13 @@ const app = {
                 
                 if (!snapshot.empty) {
                     const cloudData = [];
-                    snapshot.forEach(doc => cloudData.push(doc.data()));
+                    // CORREÇÃO: Injeta o identificador da coleção
+                    snapshot.forEach(doc => {
+                        let data = doc.data();
+                        data._collection = this.collectionName; 
+                        cloudData.push(data);
+                    });
+                    
                     this.towers = cloudData;
                     this.updateLocalBackup(cloudData);
                     this.renderList();
@@ -161,8 +207,11 @@ const app = {
 
     async checkDataIntegrity() {
         const localData = await idb.getAll('towers');
-        if (localData.length > 0) {
-            this.towers = localData;
+        // CORREÇÃO: Filtra apenas dados desta coleção
+        const currentLocData = localData.filter(t => t._collection === this.collectionName);
+
+        if (currentLocData.length > 0) {
+            this.towers = currentLocData;
             if(navigator.onLine && this.userRole === 'admin') this.syncNow();
         } else {
             await this.seedDatabase(); 
@@ -172,22 +221,29 @@ const app = {
 
     async loadFromLocal() {
         document.getElementById('loading-msg').style.display = 'none';
-        this.towers = await idb.getAll('towers');
+        const allData = await idb.getAll('towers');
+        // CORREÇÃO: Filtra apenas dados desta coleção
+        this.towers = allData.filter(t => t._collection === this.collectionName);
+        
         if(this.towers.length === 0) await this.seedDatabase();
         this.renderList();
     },
 
+    // Salva localmente sem apagar dados de outras cidades
     async updateLocalBackup(data) {
+        const allData = await idb.getAll('towers');
+        const otherLocationsData = allData.filter(t => t._collection !== this.collectionName);
+        const newDataToSave = [...otherLocationsData, ...data];
+
         await idb.clear('towers');
-        for (const t of data) await idb.put('towers', t);
+        for (const t of newDataToSave) await idb.put('towers', t);
     },
 
-    // --- CRIAÇÃO DE DADOS (SEED) ---
+    // Criação inicial de dados (Seed)
     async seedDatabase() {
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
         
-        // Quantidades por local
         let totalTowers = 25; 
         if (this.currentLocation === 'MSG') totalTowers = 7; 
         if (this.currentLocation === 'QUEIROZ') totalTowers = 20;
@@ -200,6 +256,7 @@ const app = {
             const idStr = i.toString().padStart(2, '0');
             const tower = {
                 id: i,
+                _collection: this.collectionName, // Identificador importante
                 nome: `ER ${idStr}`,
                 status: "Operando",
                 geral: { localizacao: "", prioridade: "Média", tecnico: "", ultimaCom: "" },
@@ -216,8 +273,8 @@ const app = {
             }
         }
         
-        await idb.clear('towers');
-        for(const t of this.towers) await idb.put('towers', t);
+        // Salva localmente preservando outros locais
+        await this.updateLocalBackup(this.towers);
         
         if(batch && this.userRole === 'admin') {
             try { await batch.commit(); } catch(e) { console.log("Salvo apenas localmente (Offline)"); }
@@ -226,7 +283,7 @@ const app = {
     },
 
     // =================================================================
-    // 4. RENDERIZAÇÃO (CARDS ABERTOS/COMPLETOS)
+    // 5. RENDERIZAÇÃO
     // =================================================================
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
@@ -288,9 +345,15 @@ const app = {
             `;
             container.appendChild(div);
         });
+        
+        // Atualiza o contador do cabeçalho se existir
+        const totalCard = document.getElementById('total-card');
+        if(totalCard) totalCard.innerText = list.length;
     },
 
-    // --- SALVAR (APENAS ADMIN) ---
+    // =================================================================
+    // 6. SALVAR DADOS
+    // =================================================================
     async saveTower(e) {
         if(this.userRole !== 'admin') return alert("Apenas Admin pode salvar!");
         e.preventDefault();
@@ -298,6 +361,7 @@ const app = {
         
         const tower = {
             id: id,
+            _collection: this.collectionName, // Garante integridade
             nome: document.getElementById('f-nome').value,
             status: document.getElementById('f-status').value,
             geral: {
@@ -326,10 +390,13 @@ const app = {
             updatedAt: new Date().toISOString()
         };
 
-        await idb.put('towers', tower);
-        this.closeModal();
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
+        
+        // Salva backup seguro
+        await this.updateLocalBackup(this.towers);
+
+        this.closeModal();
         this.renderList();
 
         if (navigator.onLine && this.db) {
@@ -339,7 +406,7 @@ const app = {
     },
 
     // =================================================================
-    // 5. RELATÓRIOS E CHECKLIST
+    // 7. GERAÇÃO DE PDFS
     // =================================================================
     
     async drawSmartLogo(doc, base64, x, y, maxW, maxH) {
@@ -460,7 +527,9 @@ const app = {
         await this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`); 
     },
 
-    // --- CHECKLIST ---
+    // =================================================================
+    // 8. CHECKLIST
+    // =================================================================
     openChecklist() { 
         if(this.userRole !== 'admin') return alert("Acesso Restrito!");
         document.getElementById('checklist-screen').style.display = 'flex';
@@ -470,7 +539,6 @@ const app = {
         document.getElementById('chk-data').valueAsDate = now;
         document.getElementById('chk-hora-inicio').value = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         
-        // Sugere horário final
         const end = new Date(); end.setMinutes(end.getMinutes() + 30);
         document.getElementById('chk-hora-fim').value = end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     },
@@ -506,10 +574,8 @@ const app = {
         if(!confirm("Gerar PDF?")) return;
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
 
-        // LOGO ESQUERDA (TECAL)
+        // LOGOS
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
-        
-        // LOGO DIREITA (ANGLOGOLD) - MAIOR E AJUSTADA (X=146, W=50)
         await this.drawSmartLogo(doc, this.logoCliente, 146, 10, 50, 25);
 
         doc.setFontSize(8); doc.setTextColor(0); doc.text("SOLUÇÕES EM TECNOLOGIA", 14, 30);
@@ -527,7 +593,6 @@ const app = {
         const veiculo = document.getElementById('chk-recurso').value;
         const exec = document.getElementById('chk-executantes').value;
         
-        // Captura Torre
         const torreSel = document.getElementById('chk-torre').value;
 
         doc.text(`UNIDADE: ${this.currentLocation}  |  TORRE: ${torreSel}  |  DATA: ${data}`, 16, 42);
@@ -550,7 +615,9 @@ const app = {
         doc.save(`Checklist_${this.currentLocation}_${data}.pdf`);
     },
 
-    // --- UTILS ---
+    // =================================================================
+    // 9. FUNÇÕES UTILITÁRIAS
+    // =================================================================
     filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
     closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
     editTower(id) { 
@@ -558,7 +625,7 @@ const app = {
         this.tempPhotos = [...t.fotos] || [];
         document.getElementById('tower-form').reset();
         document.getElementById('image-preview-container').innerHTML = '';
-        // Preencher IDs...
+        
         document.getElementById('tower-id').value = t.id; document.getElementById('f-nome').value = t.nome; document.getElementById('f-status').value = t.status;
         document.getElementById('f-geral-local').value = t.geral.localizacao; document.getElementById('f-geral-prio').value = t.geral.prioridade; document.getElementById('f-geral-tec').value = t.geral.tecnico; document.getElementById('f-geral-ultimacom').value = t.geral.ultimaCom;
         document.getElementById('f-falhas-detectada').value = t.falhas.detectada; document.getElementById('f-falhas-historico').value = t.falhas.historico; document.getElementById('f-falhas-acao').value = t.falhas.acao;
