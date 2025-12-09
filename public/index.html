@@ -3,104 +3,258 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gestão de Torres</title>
-    <link rel="manifest" href="manifest.json">
+    <title>Gestão de Torres - V2</title>
+    
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
     <link rel="stylesheet" href="style.css">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="icon-192.png">
-
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 
-    <div id="login-screen" class="login-overlay">
+    <div id="connection-status" class="status-badge online">Conectado</div>
+
+    <div id="login-screen" class="fullscreen-center">
         <div class="login-box">
-            <img id="login-logo-view" class="login-logo-img" alt="Logo" style="display:none;">
-            <div class="menu-header"><h2>🔐 Acesso Restrito</h2><p>Identifique-se</p></div>
-            <div class="login-form">
-                <input type="text" id="login-user" placeholder="Usuário">
-                <input type="password" id="login-pass" placeholder="Senha">
-                <button class="btn-login-admin" onclick="app.checkLogin()">Entrar Admin</button>
+            <img id="login-logo-view" class="login-logo" src="" alt="Logo Empresa">
+            <h2>Gestão de Torres</h2>
+            <p style="color: #888; font-size:13px; margin-bottom:20px;">Acesso Restrito</p>
+            <div class="input-group">
+                <label>Usuário</label>
+                <input type="text" id="login-user" placeholder="Digite seu usuário">
             </div>
-            <div class="divider-text">ou</div>
-            <button class="btn-login-visitor" onclick="app.visitorLogin()">Entrar Visitante</button>
+            <div class="input-group">
+                <label>Senha</label>
+                <input type="password" id="login-pass" placeholder="Digite sua senha">
+            </div>
+            <button class="btn btn-primary" onclick="app.checkLogin()" style="width:100%; margin-top:10px;">
+                <span class="material-icons">login</span> Entrar
+            </button>
+            <div style="margin: 20px 0; border-top: 1px solid #eee;"></div>
+            <button class="btn btn-secondary" onclick="app.visitorLogin()" style="width:100%;">
+                <span class="material-icons">visibility</span> Acesso Visitante
+            </button>
+        </div>
+        <p style="color:white; font-size:11px; margin-top:20px; opacity:0.7">Versão 3.0 (IDB + Firebase)</p>
+    </div>
+
+    <div id="location-screen" class="fullscreen-center hidden">
+        <div class="login-box" style="max-width: 600px;">
+            <h3 style="color:var(--primary)">Selecione a Unidade</h3>
+            <p style="color:#666; font-size:14px; margin-bottom:25px;">Escolha a base operacional:</p>
+            
+            <div class="location-grid">
+                <button class="btn-loc" onclick="app.selectLocation('MSG')">
+                    <span class="material-icons" style="font-size:36px; color:#28a745; margin-bottom:8px;">dns</span>
+                    MSG
+                    <small>Crixás - GO</small>
+                </button>
+                <button class="btn-loc" onclick="app.selectLocation('QUEIROZ')">
+                    <span class="material-icons" style="font-size:36px; color:#dc3545; margin-bottom:8px;">factory</span>
+                    QUEIROZ
+                    <small>Raposos - MG</small>
+                </button>
+                <button class="btn-loc" onclick="app.selectLocation('CUIABA')">
+                    <span class="material-icons" style="font-size:36px; color:#ffc107; margin-bottom:8px;">terrain</span>
+                    CUIABÁ
+                    <small>Sabará - MG</small>
+                </button>
+                <button class="btn-loc" onclick="app.selectLocation('RPX')">
+                    <span class="material-icons" style="font-size:36px; color:#17a2b8; margin-bottom:8px;">construction</span>
+                    RPX
+                    <small>Raposos - MG</small>
+                </button>
+            </div>
+            
+            <button class="btn btn-danger" onclick="location.reload()" style="margin-top: 30px; width:100%">
+                <span class="material-icons">arrow_back</span> Sair
+            </button>
         </div>
     </div>
 
-    <div id="location-screen" class="login-overlay" style="display:none;">
-        <div class="login-box">
-            <div class="menu-header"><h2>📍 Unidade</h2><p>Selecione o local de trabalho</p></div>
-            <div class="menu-buttons">
-                <button class="btn-location" onclick="app.selectLocation('QUEIROZ')"><span class="loc-name">Queiroz</span><span class="loc-city">Raposos - MG</span><span class="loc-count">25 Torres</span></button>
-                <button class="btn-location" onclick="app.selectLocation('CUIABA')"><span class="loc-name">Cuiabá</span><span class="loc-city">Sabará - MG</span><span class="loc-count">25 Torres</span></button>
-                <button class="btn-location" onclick="app.selectLocation('MSG')"><span class="loc-name">MSG</span><span class="loc-city">Crixás - GO</span><span class="loc-count">07 Torres</span></button>
-                <button class="btn-location" onclick="app.selectLocation('CDS')"><span class="loc-name">CDS</span><span class="loc-city">Santa Bárbara - MG</span><span class="loc-count">25 Torres</span></button>
+    <div id="app-content">
+        <div class="app-header">
+            <div class="header-title">
+                <h1>Painel de Controle</h1>
+                <span>Unidade: <strong id="current-loc-badge" style="color:var(--primary)">---</strong></span>
+            </div>
+            <button class="btn btn-danger" onclick="location.reload()" style="padding: 6px 12px; font-size: 12px;">
+                <span class="material-icons" style="font-size: 16px;">logout</span> Sair
+            </button>
+        </div>
+
+        <div class="toolbar">
+            <div class="search-box">
+                <span class="material-icons search-icon">search</span>
+                <input type="text" id="search" placeholder="Buscar torre..." onkeyup="app.filterList()">
+            </div>
+            <div class="action-buttons">
+                <button class="btn btn-success" id="btn-new-checklist" onclick="app.openChecklist()">
+                    <span class="material-icons">playlist_add</span> Checklist
+                </button>
+                <button class="btn btn-primary" onclick="app.generateGlobalPDF()">
+                    <span class="material-icons">description</span> Rel. Geral
+                </button>
+                <button class="btn btn-secondary" onclick="app.generateMonthlyPDF()">
+                    <span class="material-icons">date_range</span> Rel. Mensal
+                </button>
             </div>
         </div>
-    </div>
 
-    <div id="app-content" style="display:none;">
-        <header>
-            <div class="header-top"><h1><span id="current-loc-badge" class="loc-badge">...</span> Painel <span id="connection-status" class="status-badge online">...</span></h1></div>
-            <div class="header-actions">
-                <button id="btn-new-checklist" class="btn-action btn-checklist" onclick="app.openChecklist()">📋 Checklist</button>
-                <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Geral</button>
-                <button class="btn-month-pdf" onclick="app.generateMonthlyPDF()">📅 Mensal</button>
-                <button class="btn-sync" onclick="app.syncNow()">🔄 Sync</button>
-                <button class="btn-exit" onclick="window.location.reload()">Sair</button>
-            </div>
-        </header>
-
-        <div class="container">
-            <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre..." onkeyup="app.filterList()">
-            <div id="loading-msg" style="text-align:center; padding:20px; color:#666;">Carregando dados...</div>
-            <div id="tower-list" class="tower-list"></div>
+        <div class="stats-bar">
+            <span>Total: <strong id="total-card" style="color:var(--dark)">0</strong></span>
+            <span id="loading-msg" style="color: var(--primary); font-weight: bold; font-size:12px;">
+                <span class="material-icons" style="font-size:12px; vertical-align:middle; animation: spin 1s infinite linear;">autorenew</span> Sincronizando...
+            </span>
         </div>
-    </div>
 
-    <div id="checklist-screen" class="checklist-overlay" style="display:none;">
-        <div class="checklist-header"><button onclick="app.closeChecklist()" class="btn-back">← Voltar</button><h2>Checklist</h2><button onclick="app.generateChecklistPDF()" class="btn-save-check">Gerar PDF</button></div>
-        <div class="checklist-content">
-            <div class="check-section">
-                <h3>Dados</h3>
-                <div class="two-col"><div><label>Data</label><input type="date" id="chk-data"></div><div><label>Início</label><input type="time" id="chk-hora-inicio"></div></div>
-                <div class="two-col"><div><label>Clima</label><select id="chk-clima"><option>Ensolarado</option><option>Nublado</option><option>Chuvoso</option></select></div><div><label>Recurso</label><select id="chk-recurso"><option>Veículo 4x4</option><option>Cesto</option><option>A pé</option></select></div></div>
-                <label>Executantes</label><input type="text" id="chk-executantes">
+        <div id="tower-list" class="tower-grid">
             </div>
-            <div id="checklist-items-container"></div>
-            <div class="check-section">
-                <h3>Finalização</h3>
-                <div style="margin-bottom:15px"><label style="font-weight:bold; color:#0056b3">Horário Término:</label><input type="time" id="chk-hora-fim" style="width:100%; padding:10px; font-size:1.1rem; border:1px solid #ccc; border-radius:6px;"></div>
-                <h3>Assinatura (TECAL)</h3><div class="signature-pad-wrapper"><canvas id="signature-pad"></canvas></div>
-                <button type="button" class="btn-clear-sig" onclick="app.clearSignature()">Limpar</button>
-                <label style="margin-top:10px">Nome</label><input type="text" id="chk-ass-nome"><label>Matrícula</label><input type="text" id="chk-ass-mat">
-            </div>
-        </div>
     </div>
 
     <div id="modal" class="modal">
         <div class="modal-content">
-             <div class="modal-header"><h2 id="modal-title">Editar Torre</h2><span class="close" onclick="app.closeModal()">&times;</span></div>
-            <form id="tower-form" onsubmit="app.saveTower(event)">
-                <input type="hidden" id="tower-id">
-                <div class="form-section"><h3>Principal</h3><label>Nome</label><input type="text" id="f-nome" readonly class="readonly-input"><label>Status</label><select id="f-status"><option value="Operando">Operando</option><option value="Falha">Falha</option><option value="Manutenção">Manutenção</option></select></div>
-                <div class="form-section"><h3>Geral</h3><label>Local</label><input type="text" id="f-geral-local"><div class="two-col"><div><label>Prio</label><select id="f-geral-prio"><option>Média</option><option>Alta</option><option>Baixa</option></select></div><div><label>Tec</label><input type="text" id="f-geral-tec"></div></div><label>Ult. Com.</label><input type="datetime-local" id="f-geral-ultimacom"></div>
-                <div class="form-section"><h3>Falhas</h3><label>Detectada</label><input type="text" id="f-falhas-detectada"><label>Histórico</label><textarea id="f-falhas-historico"></textarea><label>Ação</label><textarea id="f-falhas-acao"></textarea></div>
-                 <div class="form-section"><h3>Manutenção</h3><div class="two-col"><div><label>Ultima</label><input type="date" id="f-manu-ultima"></div><div><label>Próxima</label><input type="date" id="f-manu-proxima"></div></div><label>Custo</label><input type="text" id="f-manu-custo"><label>Peças</label><input type="text" id="f-manu-pecas"></div>
-                <div class="form-section warning-bg"><h3>Pendências</h3><label>Serviço</label><input type="text" id="f-pend-servico"><label>Material</label><input type="text" id="f-pend-material"></div>
-                <div class="form-section"><h3>Fotos</h3><input type="file" id="image-input" multiple onchange="app.handleImagePreview(event)"><div id="image-preview-container" class="image-preview-container"></div></div>
-                <div class="form-section"><h3>Obs</h3><textarea id="f-obs"></textarea></div>
-                <div class="modal-actions sticky-footer"><button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button><button type="submit" class="btn-save">Salvar</button></div>
-            </form>
+            <div class="modal-header">
+                <h2><span class="material-icons">edit</span> Editar Torre</h2>
+                <span class="close" onclick="app.closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="tower-form" onsubmit="app.saveTower(event)">
+                    <input type="hidden" id="tower-id">
+                    
+                    <div class="form-section">
+                        <h3>Identificação</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Nome</label>
+                                <input type="text" id="f-nome" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Status</label>
+                                <select id="f-status">
+                                    <option value="Operando">Operando</option>
+                                    <option value="Manutenção">Manutenção</option>
+                                    <option value="Falha">Falha</option>
+                                    <option value="Desativada">Desativada</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Geral</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Localização</label><input type="text" id="f-geral-local"></div>
+                            <div class="form-group"><label>Prioridade</label>
+                                <select id="f-geral-prio">
+                                    <option value="Baixa">Baixa</option>
+                                    <option value="Média">Média</option>
+                                    <option value="Alta">Alta</option>
+                                </select>
+                            </div>
+                            <div class="form-group"><label>Técnico</label><input type="text" id="f-geral-tec"></div>
+                            <div class="form-group"><label>Última Com.</label><input type="datetime-local" id="f-geral-ultimacom"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Falhas</h3>
+                        <div class="form-group"><label>Detectada</label><input type="text" id="f-falhas-detectada"></div>
+                        <div class="form-group"><label>Histórico</label><textarea id="f-falhas-historico" rows="2"></textarea></div>
+                        <div class="form-group"><label>Ação</label><input type="text" id="f-falhas-acao"></div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Manutenção</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Última</label><input type="date" id="f-manu-ultima"></div>
+                            <div class="form-group"><label>Próxima</label><input type="date" id="f-manu-proxima"></div>
+                            <div class="form-group"><label>Custo</label><input type="text" id="f-manu-custo"></div>
+                        </div>
+                        <div class="form-group"><label>Peças</label><input type="text" id="f-manu-pecas"></div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Pendências</h3>
+                        <div class="form-group"><label>Serviço</label><input type="text" id="f-pend-servico"></div>
+                        <div class="form-group"><label>Material</label><input type="text" id="f-pend-material"></div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Fotos & Obs</h3>
+                        <div class="form-group"><label>Observações</label><textarea id="f-obs" rows="3"></textarea></div>
+                        
+                        <div class="photo-area">
+                            <p style="margin-bottom: 10px; font-weight: bold; color: #666;">
+                                <span class="material-icons" style="vertical-align: middle;">add_a_photo</span> Fotos
+                            </p>
+                            <input type="file" accept="image/*" multiple onchange="app.handleImagePreview(event)" style="display:none;" id="photo-input">
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('photo-input').click()">Selecionar</button>
+                            <div id="image-preview-container" class="preview-container"></div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-success" style="width:100%; margin-top:20px; padding: 15px;">
+                        <span class="material-icons">save</span> Salvar Alterações
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 
-    <script src="idb.js"></script>
+    <div id="checklist-screen">
+        <div class="chk-header">
+            <h2 style="margin:0; font-size: 18px; display:flex; align-items:center; gap:10px;">
+                <span class="material-icons">assignment_turned_in</span> Novo Checklist
+            </h2>
+            <button class="btn btn-danger" onclick="app.closeChecklist()" style="width:auto; margin:0;">
+                <span class="material-icons">close</span> Fechar
+            </button>
+        </div>
+        <div class="chk-body">
+            <div class="chk-meta-grid">
+                <div class="form-group"><label>Data</label><input type="date" id="chk-data"></div>
+                <div class="form-group"><label>Início</label><input type="time" id="chk-hora-inicio"></div>
+                <div class="form-group"><label>Fim</label><input type="time" id="chk-hora-fim"></div>
+                <div class="form-group"><label>Torre</label><input type="text" id="chk-torre" placeholder="ER 01"></div>
+                <div class="form-group"><label>Clima</label>
+                    <select id="chk-clima">
+                        <option>Ensolarado</option>
+                        <option>Nublado</option>
+                        <option>Chuvoso</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>Recurso</label><input type="text" id="chk-recurso"></div>
+                <div class="form-group" style="grid-column: 1 / -1;"><label>Executantes</label><input type="text" id="chk-executantes"></div>
+            </div>
+
+            <div id="checklist-items-container">
+                </div>
+
+            <div class="signature-area">
+                <h3><span class="material-icons" style="vertical-align:middle">draw</span> Assinatura</h3>
+                <input type="text" id="chk-ass-nome" placeholder="Nome do Responsável">
+                <div class="signature-pad-wrapper">
+                    <canvas id="signature-pad"></canvas>
+                </div>
+                <button class="btn btn-secondary" onclick="app.clearSignature()" style="width:auto; margin-top:10px;">Limpar</button>
+            </div>
+
+            <button class="btn btn-success" onclick="app.generateChecklistPDF()" style="width:100%; margin-top:30px; padding: 15px; font-size:16px;">
+                <span class="material-icons">picture_as_pdf</span> Gerar PDF e Finalizar
+            </button>
+            <div style="height:50px"></div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
+
 </body>
 </html>
