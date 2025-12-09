@@ -21,25 +21,30 @@
     <div id="login-screen" class="login-overlay">
         <div class="login-box">
             <img id="login-logo-view" class="login-logo-img" alt="Logo" style="display:none;">
-            <div class="menu-header"><h2>🔐 Acesso Restrito</h2><p>Identifique-se</p></div>
+            <div class="menu-header"><h2>🔐 Acesso ao Sistema</h2><p>Identifique-se</p></div>
             <div class="login-form">
-                <input type="text" id="login-user" placeholder="Usuário">
+                <input type="text" id="login-user" placeholder="Usuário (Ex: TECALADM)">
                 <input type="password" id="login-pass" placeholder="Senha">
-                <button class="btn-login-admin" onclick="app.checkLogin()">Entrar Admin</button>
+                <button class="btn-login-admin" onclick="app.checkLogin()">Entrar como Admin</button>
             </div>
             <div class="divider-text">ou</div>
-            <button class="btn-login-visitor" onclick="app.visitorLogin()">Entrar Visitante</button>
+            <button class="btn-login-visitor" onclick="app.visitorLogin()">Entrar como Visitante</button>
         </div>
     </div>
 
     <div id="location-screen" class="login-overlay" style="display:none;">
         <div class="login-box">
-            <div class="menu-header"><h2>📍 Unidade</h2><p>Selecione o local de trabalho</p></div>
+            <div class="menu-header"><h2>📍 Selecione a Unidade</h2><p>Onde você vai atuar hoje?</p></div>
             <div class="menu-buttons">
-                <button class="btn-location" onclick="app.selectLocation('QUEIROZ')"><span class="loc-name">Queiroz</span><span class="loc-city">Raposos - MG</span><span class="loc-count">25 Torres</span></button>
-                <button class="btn-location" onclick="app.selectLocation('CUIABA')"><span class="loc-name">Cuiabá</span><span class="loc-city">Sabará - MG</span><span class="loc-count">25 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('QUEIROZ')"><span class="loc-name">Queiroz</span><span class="loc-city">Raposos - MG</span><span class="loc-count">20 Torres</span></button>
+                
+                <button class="btn-location" onclick="app.selectLocation('CUIABA')"><span class="loc-name">Cuiabá</span><span class="loc-city">Sabará - MG</span><span class="loc-count">10 Torres</span></button>
+                
                 <button class="btn-location" onclick="app.selectLocation('MSG')"><span class="loc-name">MSG</span><span class="loc-city">Crixás - GO</span><span class="loc-count">07 Torres</span></button>
+                
                 <button class="btn-location" onclick="app.selectLocation('CDS')"><span class="loc-name">CDS</span><span class="loc-city">Santa Bárbara - MG</span><span class="loc-count">25 Torres</span></button>
+                
+                <button class="btn-location" onclick="app.selectLocation('RPX')"><span class="loc-name">RPX</span><span class="loc-city">Raposos - MG</span><span class="loc-count">03 Torres</span></button>
             </div>
         </div>
     </div>
@@ -51,11 +56,10 @@
                 <button id="btn-new-checklist" class="btn-action btn-checklist" onclick="app.openChecklist()">📋 Checklist</button>
                 <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Geral</button>
                 <button class="btn-month-pdf" onclick="app.generateMonthlyPDF()">📅 Mensal</button>
-                <button class="btn-sync" onclick="app.syncNow()">🔄 Sync</button>
+                <button class="btn-sync" onclick="app.syncNow()">🔄</button>
                 <button class="btn-exit" onclick="window.location.reload()">Sair</button>
             </div>
         </header>
-
         <div class="container">
             <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre..." onkeyup="app.filterList()">
             <div id="loading-msg" style="text-align:center; padding:20px; color:#666;">Carregando dados...</div>
@@ -64,21 +68,61 @@
     </div>
 
     <div id="checklist-screen" class="checklist-overlay" style="display:none;">
-        <div class="checklist-header"><button onclick="app.closeChecklist()" class="btn-back">← Voltar</button><h2>Checklist</h2><button onclick="app.generateChecklistPDF()" class="btn-save-check">Gerar PDF</button></div>
+        <div class="checklist-header">
+            <button onclick="app.closeChecklist()" class="btn-back">← Voltar</button>
+            <h2>Checklist Manutenção</h2>
+            <button onclick="app.generateChecklistPDF()" class="btn-save-check">Gerar PDF</button>
+        </div>
         <div class="checklist-content">
             <div class="check-section">
-                <h3>Dados</h3>
-                <div class="two-col"><div><label>Data</label><input type="date" id="chk-data"></div><div><label>Início</label><input type="time" id="chk-hora-inicio"></div></div>
-                <div class="two-col"><div><label>Clima</label><select id="chk-clima"><option>Ensolarado</option><option>Nublado</option><option>Chuvoso</option></select></div><div><label>Recurso</label><select id="chk-recurso"><option>Veículo 4x4</option><option>Cesto</option><option>A pé</option></select></div></div>
+                <h3>Dados Iniciais</h3>
+                
+                <div class="two-col">
+                    <div><label>Data</label><input type="date" id="chk-data"></div>
+                    <div>
+                        <label>Torre</label>
+                        <select id="chk-torre">
+                            <option value="">Selecione...</option>
+                            <option>01</option><option>02</option><option>03</option><option>04</option><option>05</option>
+                            <option>06</option><option>07</option><option>08</option><option>09</option><option>10</option>
+                            <option>11</option><option>12</option><option>13</option><option>14</option><option>15</option>
+                            <option>16</option><option>17</option><option>18</option><option>19</option><option>20</option>
+                            <option>21</option><option>22</option><option>23</option><option>24</option><option>25</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:10px;"><label>Horário Início</label><input type="time" id="chk-hora-inicio"></div>
+
+                <div class="two-col">
+                    <div><label>Clima</label><select id="chk-clima"><option>Ensolarado</option><option>Nublado</option><option>Chuvoso</option></select></div>
+                    <div>
+                        <label>Recurso</label>
+                        <select id="chk-recurso">
+                            <option>Caminhonete 4x4</option>
+                            <option>Caminhão Cesto</option>
+                            <option>Escada</option>
+                            <option>A pé</option>
+                        </select>
+                    </div>
+                </div>
+                
                 <label>Executantes</label><input type="text" id="chk-executantes">
             </div>
+
             <div id="checklist-items-container"></div>
+
             <div class="check-section">
                 <h3>Finalização</h3>
-                <div style="margin-bottom:15px"><label style="font-weight:bold; color:#0056b3">Horário Término:</label><input type="time" id="chk-hora-fim" style="width:100%; padding:10px; font-size:1.1rem; border:1px solid #ccc; border-radius:6px;"></div>
-                <h3>Assinatura (TECAL)</h3><div class="signature-pad-wrapper"><canvas id="signature-pad"></canvas></div>
+                <div style="margin-bottom:20px; background:#eef; padding:10px; border-radius:8px;">
+                    <label style="font-weight:bold; color:#0056b3">Horário Término:</label>
+                    <input type="time" id="chk-hora-fim" style="width:100%; padding:10px; font-size:1.1rem;">
+                </div>
+                <h3>Assinatura (TECAL)</h3>
+                <div class="signature-pad-wrapper"><canvas id="signature-pad"></canvas></div>
                 <button type="button" class="btn-clear-sig" onclick="app.clearSignature()">Limpar</button>
-                <label style="margin-top:10px">Nome</label><input type="text" id="chk-ass-nome"><label>Matrícula</label><input type="text" id="chk-ass-mat">
+                <label style="margin-top:10px">Nome Legível</label><input type="text" id="chk-ass-nome">
+                <label>Matrícula</label><input type="text" id="chk-ass-mat">
             </div>
         </div>
     </div>
