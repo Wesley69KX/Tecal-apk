@@ -29,43 +29,6 @@ const app = {
         measurementId: "G-LJD922VTQ4"
     },
 
-Aqui está o código completo do app.js.
-
-Eu removi os base64 longos das logos (deixando vazio como pediu) e apliquei todas as correções de lógica para impedir que os dados de uma cidade apareçam em outra.
-
-JavaScript
-
-const app = {
-    // --- ESTADO DO APP ---
-    towers: [], tempPhotos: [], db: null,
-    currentLocation: "", collectionName: "",
-    
-    // --- CONTROLE DE ACESSO ---
-    userRole: "", 
-    adminUser: "Adm",
-    adminPass: "Tecal123",
-    
-    // --- CHECKLIST ---
-    signaturePad: null, isDrawing: false,
-
-    // =================================================================
-    // 1. LOGOS (COLOQUE SEUS BASE64 AQUI DEPOIS)
-    // =================================================================
-    logoEmpresa: "", // Cole o base64 da Tecal aqui
-    logoCliente: "", // Cole o base64 da Anglogold aqui
-
-    // =================================================================
-    // 2. CONFIGURAÇÃO FIREBASE
-    // =================================================================
-    firebaseConfig: {
-        apiKey: "AIzaSyCvnPi_4kZdyMjsbcfiIeaM0Qid8qDDyyg",
-        authDomain: "gestao-torres-v2.firebaseapp.com",
-        projectId: "gestao-torres-v2",
-        storageBucket: "gestao-torres-v2.firebasestorage.app",
-        messagingSenderId: "728720990458",
-        appId: "1:728720990458:web:b48fc14eb41be2ad732943",
-        measurementId: "G-LJD922VTQ4"
-    },
 
     // --- DADOS DO CHECKLIST ---
     checklistItemsData: [
