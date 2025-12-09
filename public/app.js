@@ -30,6 +30,19 @@ const app = {
     },
 
 
+    // =================================================================
+    // 2. CONFIGURAÇÃO FIREBASE
+    // =================================================================
+    firebaseConfig: {
+        apiKey: "AIzaSyCvnPi_4kZdyMjsbcfiIeaM0Qid8qDDyyg",
+        authDomain: "gestao-torres-v2.firebaseapp.com",
+        projectId: "gestao-torres-v2",
+        storageBucket: "gestao-torres-v2.firebasestorage.app",
+        messagingSenderId: "728720990458",
+        appId: "1:728720990458:web:b48fc14eb41be2ad732943",
+        measurementId: "G-LJD922VTQ4"
+    },
+
     // --- DADOS DO CHECKLIST ---
     checklistItemsData: [
         {id: "1.1", group: "Etapas Iniciais", text: "Comunicar ao CMG sobre início das atividades"},
@@ -78,18 +91,20 @@ const app = {
     // 3. SISTEMA DE LOGIN E INICIALIZAÇÃO
     // =================================================================
     initApp() {
-        if(this.logoEmpresa && this.logoEmpresa.length > 100) {
-            const img = document.getElementById('login-logo-view');
-            if(img) {
-                img.src = this.logoEmpresa;
-                img.style.display = 'block';
+        try {
+            if (this.logoEmpresa && this.logoEmpresa.length > 100) {
+                const img = document.getElementById('login-logo-view');
+                if (img) {
+                    img.src = this.logoEmpresa;
+                    img.style.display = 'block';
+                }
             }
-        }
+        } catch (e) { console.warn("initApp:", e); }
     },
 
     checkLogin() {
-        const u = document.getElementById('login-user').value;
-        const p = document.getElementById('login-pass').value;
+        const u = (document.getElementById('login-user') || {}).value || "";
+        const p = (document.getElementById('login-pass') || {}).value || "";
         if (u === this.adminUser && p === this.adminPass) {
             this.userRole = 'admin';
             this.showLocationScreen();
@@ -104,8 +119,10 @@ const app = {
     },
 
     showLocationScreen() {
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('location-screen').style.display = 'flex';
+        const loginScreen = document.getElementById('login-screen');
+        const locationScreen = document.getElementById('location-screen');
+        if (loginScreen) loginScreen.style.display = 'none';
+        if (locationScreen) locationScreen.style.display = 'flex';
         if(this.userRole === 'visitor') {
             const btn = document.getElementById('btn-new-checklist');
             if(btn) btn.style.display = 'none';
@@ -115,9 +132,12 @@ const app = {
     selectLocation(loc) {
         this.currentLocation = loc;
         this.collectionName = `towers_${loc}`; 
-        document.getElementById('location-screen').style.display = 'none';
-        document.getElementById('app-content').style.display = 'block';
-        document.getElementById('current-loc-badge').innerText = loc;
+        const ls = document.getElementById('location-screen');
+        const ac = document.getElementById('app-content');
+        if (ls) ls.style.display = 'none';
+        if (ac) ac.style.display = 'block';
+        const badge = document.getElementById('current-loc-badge');
+        if (badge) badge.innerText = loc;
         this.init(); 
     },
 
@@ -126,36 +146,46 @@ const app = {
     // =================================================================
     async init() {
         try {
-            if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
-            this.db = firebase.firestore();
-            await idb.open();
+            // inicializa firebase (compatibilidade com v8 style se disponível)
+            if (window.firebase && (!firebase.apps || firebase.apps.length === 0)) {
+                firebase.initializeApp(this.firebaseConfig);
+            }
+            this.db = (window.firebase && firebase.firestore) ? firebase.firestore() : null;
+
+            // tenta abrir o idb se existir
+            try { if (window.idb && idb.open) await idb.open(); } catch(e){ console.warn("idb.open falhou:", e); }
 
             // Listener Tempo Real
-            this.db.collection(this.collectionName).onSnapshot((snapshot) => {
-                const loading = document.getElementById('loading-msg');
-                if(loading) loading.style.display = 'none';
-                
-                if (!snapshot.empty) {
-                    const cloudData = [];
-                    // CORREÇÃO: Injeta o identificador da coleção
-                    snapshot.forEach(doc => {
-                        let data = doc.data();
-                        data._collection = this.collectionName; 
-                        cloudData.push(data);
-                    });
+            if (this.db && this.collectionName) {
+                this.db.collection(this.collectionName).onSnapshot((snapshot) => {
+                    const loading = document.getElementById('loading-msg');
+                    if(loading) loading.style.display = 'none';
                     
-                    this.towers = cloudData;
-                    this.updateLocalBackup(cloudData);
-                    this.renderList();
-                } else {
-                    this.checkDataIntegrity();
-                }
-            }, (error) => {
-                console.log("Modo Offline.");
-                const loading = document.getElementById('loading-msg');
-                if(loading) loading.style.display = 'none';
+                    if (!snapshot.empty) {
+                        const cloudData = [];
+                        snapshot.forEach(doc => {
+                            let data = doc.data() || {};
+                            data._collection = this.collectionName; 
+                            data._id = doc.id;
+                            cloudData.push(data);
+                        });
+                        
+                        this.towers = cloudData;
+                        this.updateLocalBackup(cloudData).catch(e => console.warn("backup:", e));
+                        this.renderList();
+                    } else {
+                        this.checkDataIntegrity();
+                    }
+                }, (error) => {
+                    console.log("Modo Offline. onSnapshot error:", error);
+                    const loading = document.getElementById('loading-msg');
+                    if(loading) loading.style.display = 'none';
+                    this.loadFromLocal();
+                });
+            } else {
+                // Sem DB online, carrega do local
                 this.loadFromLocal();
-            });
+            }
 
         } catch (e) {
             console.error("Erro init:", e);
@@ -165,13 +195,16 @@ const app = {
         this.updateOnlineStatus();
         window.addEventListener('online', () => this.updateOnlineStatus());
         window.addEventListener('offline', () => this.updateOnlineStatus());
-        if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
+        if ('serviceWorker' in navigator) {
+            try { navigator.serviceWorker.register('./service-worker.js'); } catch(e){ console.warn("SW register:", e); }
+        }
     },
 
     async checkDataIntegrity() {
-        const localData = await idb.getAll('towers');
+        let localData = [];
+        try { localData = (window.idb && idb.getAll) ? await idb.getAll('towers') : []; } catch(e){ console.warn("idb.getAll:", e); localData = []; }
         // CORREÇÃO: Filtra apenas dados desta coleção
-        const currentLocData = localData.filter(t => t._collection === this.collectionName);
+        const currentLocData = Array.isArray(localData) ? localData.filter(t => t && t._collection === this.collectionName) : [];
 
         if (currentLocData.length > 0) {
             this.towers = currentLocData;
@@ -183,10 +216,11 @@ const app = {
     },
 
     async loadFromLocal() {
-        document.getElementById('loading-msg').style.display = 'none';
-        const allData = await idb.getAll('towers');
+        const loadingEl = document.getElementById('loading-msg'); if (loadingEl) loadingEl.style.display = 'none';
+        let allData = [];
+        try { allData = (window.idb && idb.getAll) ? await idb.getAll('towers') : []; } catch(e){ console.warn("idb.getAll:", e); allData = []; }
         // CORREÇÃO: Filtra apenas dados desta coleção
-        this.towers = allData.filter(t => t._collection === this.collectionName);
+        this.towers = Array.isArray(allData) ? allData.filter(t => t && t._collection === this.collectionName) : [];
         
         if(this.towers.length === 0) await this.seedDatabase();
         this.renderList();
@@ -194,18 +228,28 @@ const app = {
 
     // Salva localmente sem apagar dados de outras cidades
     async updateLocalBackup(data) {
-        const allData = await idb.getAll('towers');
-        const otherLocationsData = allData.filter(t => t._collection !== this.collectionName);
-        const newDataToSave = [...otherLocationsData, ...data];
+        try {
+            const allData = (window.idb && idb.getAll) ? await idb.getAll('towers') : [];
+            const otherLocationsData = Array.isArray(allData) ? allData.filter(t => t && t._collection !== this.collectionName) : [];
+            const newDataToSave = [...otherLocationsData, ...(Array.isArray(data) ? data : [])];
 
-        await idb.clear('towers');
-        for (const t of newDataToSave) await idb.put('towers', t);
+            if (window.idb && idb.clear && idb.put) {
+                await idb.clear('towers');
+                for (const t of newDataToSave) {
+                    try { await idb.put('towers', t); } catch(e){ console.warn("idb.put:", e); }
+                }
+            } else {
+                console.warn("idb não disponível para backup local.");
+            }
+        } catch (e) {
+            console.warn("updateLocalBackup:", e);
+        }
     },
 
     // Criação inicial de dados (Seed)
     async seedDatabase() {
         const nowStr = new Date().toISOString();
-        const batch = this.db ? this.db.batch() : null;
+        const batch = (this.db && this.db.batch) ? this.db.batch() : null;
         
         let totalTowers = 25; 
         if (this.currentLocation === 'MSG') totalTowers = 7; 
@@ -231,8 +275,10 @@ const app = {
             this.towers.push(tower);
 
             if(batch && this.userRole === 'admin') {
-                const docRef = this.db.collection(this.collectionName).doc(String(i));
-                batch.set(docRef, tower);
+                try {
+                    const docRef = this.db.collection(this.collectionName).doc(String(i));
+                    batch.set(docRef, tower);
+                } catch(e){ console.warn("batch set:", e); }
             }
         }
         
@@ -240,7 +286,7 @@ const app = {
         await this.updateLocalBackup(this.towers);
         
         if(batch && this.userRole === 'admin') {
-            try { await batch.commit(); } catch(e) { console.log("Salvo apenas localmente (Offline)"); }
+            try { await batch.commit(); } catch(e) { console.log("Salvo apenas localmente (Offline ou batch falhou)"); }
         }
         this.renderList();
     },
@@ -250,6 +296,7 @@ const app = {
     // =================================================================
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
+        if (!container) return;
         container.innerHTML = '';
         if(!list || list.length === 0) return;
 
@@ -257,18 +304,34 @@ const app = {
 
         list.forEach(t => {
             const div = document.createElement('div');
-            div.className = `card st-${t.status.replace(' ','')}`;
+            // remove todos os espaços do status para criar classe
+            const statusClass = (t.status || "").toString().replace(/\s+/g,'');
+            div.className = `card st-${statusClass}`;
             
-            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
-                             (t.pendencias.servico && t.pendencias.servico.length > 1) || 
-                             (t.falhas.detectada && t.falhas.detectada.length > 1) ||
-                             t.status === "Falha";
+            const hasAlert = ((t.pendencias && t.pendencias.material && t.pendencias.material.length > 1) || 
+                             (t.pendencias && t.pendencias.servico && t.pendencias.servico.length > 1) || 
+                             (t.falhas && t.falhas.detectada && t.falhas.detectada.length > 1) ||
+                             t.status === "Falha");
             
             const alertHTML = hasAlert ? `<div class="warning-alert">⚠️ Pendências encontradas</div>` : '';
 
-            const fmtDate = (d) => (d && d.length > 5) ? new Date(d).toLocaleDateString('pt-BR') : '-';
-            const fmtTime = (d) => (d && d.length > 5) ? new Date(d).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '';
-            const val = (v) => (v && v.length > 0) ? v : '-';
+            const fmtDate = (d) => {
+                if (!d) return '-';
+                try {
+                    const dt = new Date(d);
+                    if (isNaN(dt)) return '-';
+                    return dt.toLocaleDateString('pt-BR');
+                } catch(e){ return '-'; }
+            };
+            const fmtTime = (d) => {
+                if (!d) return '';
+                try {
+                    const dt = new Date(d);
+                    if (isNaN(dt)) return '';
+                    return dt.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+                } catch(e){ return ''; }
+            };
+            const val = (v) => (v || v === 0) ? v : '-';
 
             const editBtn = (this.userRole === 'admin') 
                 ? `<button class="btn-card btn-edit" onclick="app.editTower(${t.id})">Editar</button>` 
@@ -282,24 +345,24 @@ const app = {
                 ${alertHTML}
                 <div class="card-body">
                     <div class="info-grid">
-                        <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(t.geral.localizacao)}</span></div>
-                        <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(t.geral.tecnico)}</span></div>
-                        <div class="info-item"><span class="info-label">Última Manut.</span><span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
-                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDate(t.geral.ultimaCom)} ${fmtTime(t.geral.ultimaCom)}</span></div>
+                        <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val((t.geral && t.geral.localizacao) || '')}</span></div>
+                        <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val((t.geral && t.geral.tecnico) || '')}</span></div>
+                        <div class="info-item"><span class="info-label">Última Manut.</span><span class="info-value">${fmtDate(t.manutencao ? t.manutencao.ultima : '')}</span></div>
+                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDate((t.geral && t.geral.ultimaCom) || '')} ${fmtTime((t.geral && t.geral.ultimaCom) || '')}</span></div>
                         
                         <div class="divider"></div>
                         
                         <div class="info-item" style="grid-column: 1 / -1;">
                             <span class="info-label">Falha Detectada:</span> 
-                            <span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span>
+                            <span class="info-value ${t.falhas && t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas ? t.falhas.detectada : '')}</span>
                         </div>
                          <div class="info-item" style="grid-column: 1 / -1;">
                             <span class="info-label">Material Pendente:</span> 
-                            <span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span>
+                            <span class="info-value ${t.pendencias && t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias ? t.pendencias.material : '')}</span>
                         </div>
                     </div>
                     ${t.observacoes ? `<div class="obs-box">"${t.observacoes}"</div>` : ''}
-                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; color:blue; font-weight:bold">📷 ${t.fotos.length} fotos</div>` : ''}
+                    ${t.fotos && t.fotos.length > 0 ? `<div style="margin-top:10px; color:blue; font-weight:bold">📷 ${t.fotos.length} fotos</div>` : ''}
                 </div>
                 <div class="card-footer">
                     <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">PDF</button>
@@ -319,52 +382,53 @@ const app = {
     // =================================================================
     async saveTower(e) {
         if(this.userRole !== 'admin') return alert("Apenas Admin pode salvar!");
-        e.preventDefault();
-        const id = parseInt(document.getElementById('tower-id').value);
-        
+        if (e && e.preventDefault) e.preventDefault();
+        const id = parseInt((document.getElementById('tower-id') || {}).value, 10);
+
         const tower = {
             id: id,
             _collection: this.collectionName, // Garante integridade
-            nome: document.getElementById('f-nome').value,
-            status: document.getElementById('f-status').value,
+            nome: (document.getElementById('f-nome') || {}).value || '',
+            status: (document.getElementById('f-status') || {}).value || '',
             geral: {
-                localizacao: document.getElementById('f-geral-local').value,
-                prioridade: document.getElementById('f-geral-prio').value,
-                tecnico: document.getElementById('f-geral-tec').value,
-                ultimaCom: document.getElementById('f-geral-ultimacom').value
+                localizacao: (document.getElementById('f-geral-local') || {}).value || '',
+                prioridade: (document.getElementById('f-geral-prio') || {}).value || '',
+                tecnico: (document.getElementById('f-geral-tec') || {}).value || '',
+                ultimaCom: (document.getElementById('f-geral-ultimacom') || {}).value || ''
             },
             falhas: {
-                detectada: document.getElementById('f-falhas-detectada').value,
-                historico: document.getElementById('f-falhas-historico').value,
-                acao: document.getElementById('f-falhas-acao').value
+                detectada: (document.getElementById('f-falhas-detectada') || {}).value || '',
+                historico: (document.getElementById('f-falhas-historico') || {}).value || '',
+                acao: (document.getElementById('f-falhas-acao') || {}).value || ''
             },
             manutencao: {
-                ultima: document.getElementById('f-manu-ultima').value,
-                proxima: document.getElementById('f-manu-proxima').value,
-                custo: document.getElementById('f-manu-custo').value,
-                pecas: document.getElementById('f-manu-pecas').value
+                ultima: (document.getElementById('f-manu-ultima') || {}).value || '',
+                proxima: (document.getElementById('f-manu-proxima') || {}).value || '',
+                custo: (document.getElementById('f-manu-custo') || {}).value || '',
+                pecas: (document.getElementById('f-manu-pecas') || {}).value || ''
             },
             pendencias: {
-                servico: document.getElementById('f-pend-servico').value,
-                material: document.getElementById('f-pend-material').value
+                servico: (document.getElementById('f-pend-servico') || {}).value || '',
+                material: (document.getElementById('f-pend-material') || {}).value || ''
             },
-            observacoes: document.getElementById('f-obs').value,
-            fotos: this.tempPhotos,
+            observacoes: (document.getElementById('f-obs') || {}).value || '',
+            fotos: Array.isArray(this.tempPhotos) ? this.tempPhotos.slice() : [],
             updatedAt: new Date().toISOString()
         };
 
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
+        else this.towers.push(tower);
         
         // Salva backup seguro
-        await this.updateLocalBackup(this.towers);
+        await this.updateLocalBackup(this.towers).catch(e => console.warn("backup saveTower:", e));
 
         this.closeModal();
         this.renderList();
 
         if (navigator.onLine && this.db) {
             try { await this.db.collection(this.collectionName).doc(String(id)).set(tower); }
-            catch (error) { console.error(error); }
+            catch (error) { console.error("Erro ao salvar no firestore:", error); }
         }
     },
 
@@ -377,12 +441,14 @@ const app = {
         return new Promise((resolve) => {
             const img = new Image(); img.src = base64;
             img.onload = () => {
-                const r = img.width / img.height; let w = maxW, h = maxW/r;
-                if (h > maxH) { h = maxH; w = maxH * r; }
-                try { doc.addImage(base64, 'PNG', x+(maxW-w)/2, y+(maxH-h)/2, w, h); } catch(e){}
+                try {
+                    const r = img.width / img.height; let w = maxW, h = maxW / r;
+                    if (h > maxH) { h = maxH; w = maxH * r; }
+                    try { doc.addImage(base64, 'PNG', x + (maxW - w) / 2, y + (maxH - h) / 2, w, h); } catch(e){}
+                } catch(e){}
                 resolve();
             };
-            img.onerror = resolve;
+            img.onerror = () => resolve();
         });
     },
 
@@ -414,7 +480,7 @@ const app = {
 
         const lista = [...this.towers].sort((a,b) => a.id - b.id);
         for(let i=0; i<lista.length; i++) {
-            doc.addPage();
+            if(i > 0) doc.addPage();
             await this.drawTowerPage(doc, lista[i], i+1, lista.length);
         }
         doc.save(`Relatorio_${this.currentLocation}_${new Date().toISOString().slice(0,10)}.pdf`);
@@ -424,9 +490,9 @@ const app = {
         const input = prompt("Mês/Ano (ex: 12/2025):"); if (!input) return;
         const [mes, ano] = input.split('/'); if (!mes || !ano) return alert("Erro no formato.");
         const filtered = this.towers.filter(t => {
-            if (!t.manutencao.ultima) return false;
+            if (!t.manutencao || !t.manutencao.ultima) return false;
             const d = new Date(t.manutencao.ultima); d.setHours(12);
-            return (d.getMonth() + 1) == parseInt(mes) && d.getFullYear() == parseInt(ano);
+            return (d.getMonth() + 1) == parseInt(mes, 10) && d.getFullYear() == parseInt(ano, 10);
         });
         if (filtered.length === 0) return alert("Sem registros.");
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
@@ -437,32 +503,42 @@ const app = {
         doc.text(`Período: ${input} - ${this.currentLocation}`, 105, 100, null, null, "center");
         
         for(let i=0; i<filtered.length; i++) {
-            doc.addPage();
+            if(i > 0) doc.addPage();
             await this.drawTowerPage(doc, filtered[i], i+1, filtered.length);
         }
         doc.save(`Relatorio_Mensal_${mes}_${ano}.pdf`);
     },
 
     async drawTowerPage(doc, t, pageNumber, totalPages) {
-        doc.setFont("times", "roman");
+        doc.setFont("times", "normal");
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         
         doc.setFontSize(10); doc.setTextColor(80);
-        doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 15, null, null, "right");
+        const nomeRel = t && t.nome ? t.nome : '---';
+        doc.text(`Relatório: ${nomeRel} (${this.currentLocation})`, 196, 15, null, null, "right");
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 20, null, null, "right");
         doc.setDrawColor(0); doc.line(14, 28, 196, 28);
         let y = 40; doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
-        doc.text(`Detalhes: ${t.nome}`, 105, y, null, null, "center"); y += 15;
+        doc.text(`Detalhes: ${nomeRel}`, 105, y, null, null, "center"); y += 15;
         
         const drawSection = (title, obj) => {
             doc.setFontSize(13); doc.setFont("times", "bold"); doc.text(title, 14, y);
             y += 2; doc.line(14, y, 196, y); y += 6;
             doc.setFontSize(11); doc.setFont("times", "normal");
-            Object.entries(obj).forEach(([k, v]) => {
-                let val = (v && v!=='-') ? v : '---';
-                if(k.includes('ultima') || k.includes('proxima')) { try { if(v.includes('-')) val = new Date(v).toLocaleDateString('pt-BR'); } catch(e){} }
+            const entries = obj && typeof obj === 'object' ? Object.entries(obj) : [];
+            entries.forEach(([k, v]) => {
+                let val = (v !== undefined && v !== null && v !== '') ? v : '---';
+                // datas: tenta parse Date de forma robusta
+                if (k.toLowerCase().includes('ultima') || k.toLowerCase().includes('proxima')) {
+                    try {
+                        const dObj = new Date(v);
+                        if (!isNaN(dObj)) val = dObj.toLocaleDateString('pt-BR');
+                    } catch(e){}
+                }
                 doc.setFont("times", "bold"); doc.text(`${k.charAt(0).toUpperCase()+k.slice(1)}:`, 14, y);
-                doc.setFont("times", "normal"); doc.text(doc.splitTextToSize(val, 130), 60, y); y += 7;
+                const textLines = doc.splitTextToSize(String(val), 130);
+                doc.setFont("times", "normal"); doc.text(textLines, 60, y);
+                y += (Array.isArray(textLines) ? textLines.length * 6 : 7);
             });
             y += 5;
         };
@@ -471,14 +547,15 @@ const app = {
         drawSection("Manutenção", t.manutencao || {}); 
         drawSection("Pendências", t.pendencias || {});
         
-        if(t.observacoes) { doc.setFont("times", "bold"); doc.text("Observações", 14, y); y+=6; doc.setFont("times", "italic"); doc.text(doc.splitTextToSize(t.observacoes, 180), 14, y); }
+        if(t.observacoes) { doc.setFont("times", "bold"); doc.text("Observações", 14, y); y+=6; doc.setFont("times", "italic"); doc.text(doc.splitTextToSize(t.observacoes, 180), 14, y); y += 10; }
         if(t.fotos && t.fotos.length > 0) {
             doc.addPage(); y=30; 
             await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
             doc.setFont("times", "bold"); doc.text("Registro Fotográfico", 105, y, null, null, "center"); y+=15;
             for(const f of t.fotos) {
                 if(y>200) { doc.addPage(); y=30; }
-                await this.drawSmartLogo(doc, f, 35, y, 140, 100); y+=105;
+                try { await this.drawSmartLogo(doc, f, 35, y, 140, 100); } catch(e){ console.warn("draw foto:", e); }
+                y+=105;
             }
         }
         if(pageNumber) { doc.setFontSize(9); doc.setFont("times", "normal"); doc.text(`Página ${pageNumber} de ${totalPages}`, 105, 290, null, null, "center"); }
@@ -486,8 +563,9 @@ const app = {
 
     async generatePDF(id) { 
         const t = this.towers.find(x => x.id == id);
+        if(!t) return alert("ERRO: Torre não encontrada para gerar PDF.");
         const { jsPDF } = window.jspdf; const doc = new jsPDF(); 
-        await this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`); 
+        await this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome || 'Relatorio'}.pdf`); 
     },
 
     // =================================================================
@@ -495,24 +573,32 @@ const app = {
     // =================================================================
     openChecklist() { 
         if(this.userRole !== 'admin') return alert("Acesso Restrito!");
-        document.getElementById('checklist-screen').style.display = 'flex';
+        const chkScreen = document.getElementById('checklist-screen'); if (chkScreen) chkScreen.style.display = 'flex';
         this.renderChecklistForm(); this.setupSignaturePad();
         
         const now = new Date();
-        document.getElementById('chk-data').valueAsDate = now;
-        document.getElementById('chk-hora-inicio').value = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const elData = document.getElementById('chk-data');
+        if (elData && elData.valueAsDate !== undefined) elData.valueAsDate = now;
+        const elHoraIni = document.getElementById('chk-hora-inicio');
+        if (elHoraIni) elHoraIni.value = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         
         const end = new Date(); end.setMinutes(end.getMinutes() + 30);
-        document.getElementById('chk-hora-fim').value = end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const elHoraFim = document.getElementById('chk-hora-fim');
+        if (elHoraFim) elHoraFim.value = end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     },
 
-    closeChecklist() { document.getElementById('checklist-screen').style.display = 'none'; },
+    closeChecklist() { const el = document.getElementById('checklist-screen'); if(el) el.style.display = 'none'; },
 
     renderChecklistForm() {
-        const container = document.getElementById('checklist-items-container'); container.innerHTML = '';
+        const container = document.getElementById('checklist-items-container'); 
+        if(!container) return;
+        container.innerHTML = '';
         let currentGroup = '';
         this.checklistItemsData.forEach(item => {
-            if (item.group !== currentGroup) { currentGroup = item.group; container.innerHTML += `<div class="check-section"><h3>${currentGroup}</h3></div>`; }
+            if (item.group !== currentGroup) { 
+                currentGroup = item.group; 
+                container.innerHTML += `<div class="check-section"><h3>${currentGroup}</h3></div>`; 
+            }
             const section = container.lastElementChild;
             const row = document.createElement('div'); row.className = 'chk-row';
             row.innerHTML = `<div class="chk-title">${item.id} - ${item.text}</div><div class="chk-controls"><div class="radio-group"><label class="radio-label"><input type="radio" name="status_${item.id}" value="OK" checked> OK</label><label class="radio-label"><input type="radio" name="status_${item.id}" value="NOK"> NOK</label><label class="radio-label"><input type="radio" name="status_${item.id}" value="NA"> N/A</label></div></div><input type="text" class="chk-comment" id="comment_${item.id}" placeholder="Comentários...">`;
@@ -521,17 +607,24 @@ const app = {
     },
 
     setupSignaturePad() {
-        const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d');
-        const wrapper = document.querySelector('.signature-pad-wrapper'); canvas.width = wrapper.offsetWidth; canvas.height = wrapper.offsetHeight;
+        const canvas = document.getElementById('signature-pad'); 
+        const wrapper = document.querySelector('.signature-pad-wrapper');
+        if (!canvas || !wrapper) return;
+        const ctx = canvas.getContext('2d');
+        canvas.width = wrapper.offsetWidth || 300; canvas.height = wrapper.offsetHeight || 120;
         ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
         const startDraw = (e) => { this.isDrawing = true; ctx.beginPath(); const { offsetX, offsetY } = this.getPos(e, canvas); ctx.moveTo(offsetX, offsetY); };
         const draw = (e) => { if (!this.isDrawing) return; const { offsetX, offsetY } = this.getPos(e, canvas); ctx.lineTo(offsetX, offsetY); ctx.stroke(); };
         const stopDraw = () => { this.isDrawing = false; };
-        canvas.onmousedown = startDraw; canvas.onmousemove = draw; canvas.onmouseup = stopDraw;
+        canvas.onmousedown = startDraw; canvas.onmousemove = draw; canvas.onmouseup = stopDraw; canvas.onmouseleave = stopDraw;
         canvas.ontouchstart = (e) => { e.preventDefault(); startDraw(e); }; canvas.ontouchmove = (e) => { e.preventDefault(); draw(e); }; canvas.ontouchend = stopDraw;
     },
-    getPos(e, canvas) { if (e.touches && e.touches.length > 0) { const rect = canvas.getBoundingClientRect(); return { offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top }; } return { offsetX: e.offsetX, offsetY: e.offsetY }; },
-    clearSignature() { const canvas = document.getElementById('signature-pad'); const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); },
+    getPos(e, canvas) { 
+        if (!canvas) return { offsetX: 0, offsetY: 0 };
+        if (e.touches && e.touches.length > 0) { const rect = canvas.getBoundingClientRect(); return { offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top }; } 
+        return { offsetX: e.offsetX || 0, offsetY: e.offsetY || 0 }; 
+    },
+    clearSignature() { const canvas = document.getElementById('signature-pad'); if(!canvas) return; const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); },
 
     async generateChecklistPDF() {
         if(!confirm("Gerar PDF?")) return;
@@ -549,14 +642,14 @@ const app = {
         doc.setDrawColor(0); doc.setFillColor(240, 240, 240); doc.rect(14, 35, 182, 20);
         doc.setFontSize(9); doc.setFont("helvetica", "normal");
         
-        const data = document.getElementById('chk-data').value;
-        const horaIni = document.getElementById('chk-hora-inicio').value;
-        const horaFim = document.getElementById('chk-hora-fim').value;
-        const clima = document.getElementById('chk-clima').value;
-        const veiculo = document.getElementById('chk-recurso').value;
-        const exec = document.getElementById('chk-executantes').value;
+        const data = (document.getElementById('chk-data') || {}).value || '';
+        const horaIni = (document.getElementById('chk-hora-inicio') || {}).value || '';
+        const horaFim = (document.getElementById('chk-hora-fim') || {}).value || '';
+        const clima = (document.getElementById('chk-clima') || {}).value || '';
+        const veiculo = (document.getElementById('chk-recurso') || {}).value || '';
+        const exec = (document.getElementById('chk-executantes') || {}).value || '';
         
-        const torreSel = document.getElementById('chk-torre').value;
+        const torreSel = (document.getElementById('chk-torre') || {}).value || '';
 
         doc.text(`UNIDADE: ${this.currentLocation}  |  TORRE: ${torreSel}  |  DATA: ${data}`, 16, 42);
         doc.text(`INÍCIO: ${horaIni}   |   TÉRMINO: ${horaFim}`, 16, 48);
@@ -565,44 +658,115 @@ const app = {
 
         const tableBody = [];
         this.checklistItemsData.forEach(item => {
-            const status = document.querySelector(`input[name="status_${item.id}"]:checked`).value;
-            const comment = document.getElementById(`comment_${item.id}`).value;
+            const statusEl = document.querySelector(`input[name="status_${item.id}"]:checked`);
+            const status = statusEl ? statusEl.value : 'NA';
+            const comment = (document.getElementById(`comment_${item.id}`) || {}).value || '';
             tableBody.push([item.id, item.text, status, comment]);
         });
         doc.autoTable({ startY: 60, head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], body: tableBody, theme: 'grid', headStyles: { fillColor: [0, 86, 179], textColor: 255 }, styles: { fontSize: 8, cellPadding: 2 }, didParseCell: function(data) { if (data.section === 'body' && data.column.index === 2) { if (data.cell.raw === 'NOK') data.cell.styles.textColor = [200, 0, 0]; if (data.cell.raw === 'OK') data.cell.styles.textColor = [0, 100, 0]; } } });
         
-        let finalY = doc.lastAutoTable.finalY + 20; if(finalY > 250) { doc.addPage(); finalY = 40; }
+        let finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : 80; 
+        if(finalY > 250) { doc.addPage(); finalY = 40; }
         doc.text("Responsável Técnico (TECAL):", 14, finalY);
-        doc.text(document.getElementById('chk-ass-nome').value, 14, finalY + 7);
-        try { const canvas = document.getElementById('signature-pad'); const imgData = canvas.toDataURL('image/png'); doc.addImage(imgData, 'PNG', 70, finalY - 10, 60, 30); doc.line(70, finalY + 20, 130, finalY + 20); } catch(e){}
+        doc.text((document.getElementById('chk-ass-nome') || {}).value || '', 14, finalY + 7);
+        try { const canvas = document.getElementById('signature-pad'); if (canvas) { const imgData = canvas.toDataURL('image/png'); doc.addImage(imgData, 'PNG', 70, finalY - 10, 60, 30); doc.line(70, finalY + 20, 130, finalY + 20); } } catch(e){}
         doc.save(`Checklist_${this.currentLocation}_${data}.pdf`);
     },
 
     // =================================================================
     // 9. FUNÇÕES UTILITÁRIAS
     // =================================================================
-    filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
-    closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
+    filterList() { 
+        const term = ((document.getElementById('search') || {}).value || "").toLowerCase(); 
+        this.renderList(this.towers.filter(t => (t.nome || "").toLowerCase().includes(term))); 
+    },
+    closeModal() { const m = document.getElementById('modal'); if(m) m.style.display = 'none'; this.tempPhotos = []; },
     editTower(id) { 
         const t = this.towers.find(x => x.id == id); if(!t) return;
-        this.tempPhotos = [...t.fotos] || [];
-        document.getElementById('tower-form').reset();
-        document.getElementById('image-preview-container').innerHTML = '';
+        this.tempPhotos = Array.isArray(t.fotos) ? t.fotos.slice() : [];
+        const form = document.getElementById('tower-form'); if (form) form.reset();
+        const preview = document.getElementById('image-preview-container'); if (preview) preview.innerHTML = '';
         
-        document.getElementById('tower-id').value = t.id; document.getElementById('f-nome').value = t.nome; document.getElementById('f-status').value = t.status;
-        document.getElementById('f-geral-local').value = t.geral.localizacao; document.getElementById('f-geral-prio').value = t.geral.prioridade; document.getElementById('f-geral-tec').value = t.geral.tecnico; document.getElementById('f-geral-ultimacom').value = t.geral.ultimaCom;
-        document.getElementById('f-falhas-detectada').value = t.falhas.detectada; document.getElementById('f-falhas-historico').value = t.falhas.historico; document.getElementById('f-falhas-acao').value = t.falhas.acao;
-        document.getElementById('f-manu-ultima').value = t.manutencao.ultima; document.getElementById('f-manu-proxima').value = t.manutencao.proxima; document.getElementById('f-manu-custo').value = t.manutencao.custo; document.getElementById('f-manu-pecas').value = t.manutencao.pecas;
-        document.getElementById('f-pend-servico').value = t.pendencias.servico; document.getElementById('f-pend-material').value = t.pendencias.material;
-        document.getElementById('f-obs').value = t.observacoes;
-        this.renderImagePreviews(); document.getElementById('modal').style.display = 'block';
+        document.getElementById('tower-id').value = t.id; 
+        document.getElementById('f-nome').value = t.nome || '';
+        document.getElementById('f-status').value = t.status || '';
+        document.getElementById('f-geral-local').value = (t.geral && t.geral.localizacao) || '';
+        document.getElementById('f-geral-prio').value = (t.geral && t.geral.prioridade) || '';
+        document.getElementById('f-geral-tec').value = (t.geral && t.geral.tecnico) || '';
+        document.getElementById('f-geral-ultimacom').value = (t.geral && t.geral.ultimaCom) || '';
+        document.getElementById('f-falhas-detectada').value = (t.falhas && t.falhas.detectada) || '';
+        document.getElementById('f-falhas-historico').value = (t.falhas && t.falhas.historico) || '';
+        document.getElementById('f-falhas-acao').value = (t.falhas && t.falhas.acao) || '';
+        document.getElementById('f-manu-ultima').value = (t.manutencao && t.manutencao.ultima) || '';
+        document.getElementById('f-manu-proxima').value = (t.manutencao && t.manutencao.proxima) || '';
+        document.getElementById('f-manu-custo').value = (t.manutencao && t.manutencao.custo) || '';
+        document.getElementById('f-manu-pecas').value = (t.manutencao && t.manutencao.pecas) || '';
+        document.getElementById('f-pend-servico').value = (t.pendencias && t.pendencias.servico) || '';
+        document.getElementById('f-pend-material').value = (t.pendencias && t.pendencias.material) || '';
+        document.getElementById('f-obs').value = t.observacoes || '';
+        this.renderImagePreviews(); 
+        const modal = document.getElementById('modal'); if(modal) modal.style.display = 'block';
     },
-    handleImagePreview(e) { Array.from(e.target.files).forEach(file => { this.resizeImage(file, 1280, 1280, (b64) => { this.tempPhotos.push(b64); this.renderImagePreviews(); }); }); },
-    resizeImage(file, w, h, cb) { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',0.8)); }; }; },
-    renderImagePreviews() { const c = document.getElementById('image-preview-container'); c.innerHTML = ''; this.tempPhotos.forEach((src, i) => { const d = document.createElement('div'); d.className='photo-wrapper'; d.innerHTML = `<img src="${src}" class="img-preview" onclick="window.open('${src}')"><div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>`; c.appendChild(d); }); },
-    removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
-    syncNow() { if(navigator.onLine && this.db && this.userRole === 'admin') { this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t)); alert("Sincronizando..."); } else { alert("Sem internet ou permissão."); } },
-    updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; }
+    handleImagePreview(e) { 
+        if(!e || !e.target || !e.target.files) return;
+        Array.from(e.target.files).forEach(file => { 
+            this.resizeImage(file, 1280, 1280, (b64) => { 
+                if (b64) this.tempPhotos.push(b64); 
+                this.renderImagePreviews(); 
+            }); 
+        }); 
+    },
+    resizeImage(file, w, h, cb) { 
+        const reader = new FileReader(); 
+        reader.readAsDataURL(file); 
+        reader.onload = (e) => { 
+            const img = new Image(); img.src = e.target.result; 
+            img.onload = () => { 
+                const c = document.createElement('canvas'); 
+                // evita upscaling: r <= 1
+                let r = Math.min(w / img.width, h / img.height, 1);
+                if (r <= 0) r = 1;
+                c.width = Math.round(img.width * r); 
+                c.height = Math.round(img.height * r); 
+                c.getContext('2d').drawImage(img,0,0,c.width,c.height); 
+                try { cb(c.toDataURL('image/jpeg',0.8)); } catch(e){ cb(null); }
+            }; 
+            img.onerror = () => cb(null);
+        }; 
+        reader.onerror = () => cb(null);
+    },
+    renderImagePreviews() { 
+        const c = document.getElementById('image-preview-container'); 
+        if(!c) return;
+        c.innerHTML = ''; 
+        (Array.isArray(this.tempPhotos) ? this.tempPhotos : []).forEach((src, i) => { 
+            const d = document.createElement('div'); d.className='photo-wrapper'; 
+            const safeSrc = src || '';
+            d.innerHTML = `<img src="${safeSrc}" class="img-preview" onclick="window.open('${safeSrc}')"><div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>`; 
+            c.appendChild(d); 
+        }); 
+    },
+    removePhoto(i) { 
+        if (!Array.isArray(this.tempPhotos)) this.tempPhotos = [];
+        this.tempPhotos.splice(i, 1); 
+        this.renderImagePreviews(); 
+    },
+    syncNow() { 
+        if(navigator.onLine && this.db && this.userRole === 'admin') { 
+            try {
+                this.towers.forEach(t => {
+                    if (t && t.id !== undefined) this.db.collection(this.collectionName).doc(String(t.id)).set(t);
+                });
+                alert("Sincronizando...");
+            } catch(e){ console.error("syncNow:", e); alert("Erro ao sincronizar."); }
+        } else { alert("Sem internet ou permissão."); } 
+    },
+    updateOnlineStatus() { 
+        const el = document.getElementById('connection-status'); 
+        if (!el) return;
+        el.innerText = navigator.onLine ? "Online" : "Offline"; 
+        el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; 
+    }
 };
 
 window.onload = () => app.initApp();
