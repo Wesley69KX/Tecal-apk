@@ -1,7 +1,11 @@
 const app = {
     // --- ESTADO DO APP ---
-    towers: [], tempPhotos: [], db: null,
-    currentLocation: "", collectionName: "",
+    towers: [], 
+    tempPhotos: [], 
+    db: null,       // Firebase Firestore
+    dbLocal: null,  // Banco Local (IndexedDB)
+    currentLocation: "", 
+    collectionName: "",
     
     // --- CONTROLE DE ACESSO ---
     userRole: "", 
@@ -10,7 +14,6 @@ const app = {
     
     // --- CHECKLIST ---
     signaturePad: null, isDrawing: false,
-
     // =================================================================
     // 1. COLE SUA LOGO AQUI (Obrigatório para não dar erro no PDF)
     // =================================================================
@@ -30,7 +33,7 @@ const app = {
     },
 
 
- // --- DADOS DO CHECKLIST ---
+// --- DADOS DO CHECKLIST ---
     checklistItemsData: [
         {id: "1.1", group: "Etapas Iniciais", text: "Comunicar ao CMG sobre início das atividades"},
         {id: "1.2", group: "Etapas Iniciais", text: "Abaixar o volume das remotas"},
@@ -78,6 +81,7 @@ const app = {
     // 3. INICIALIZAÇÃO
     // =================================================================
     initApp() {
+        console.log("App Iniciado");
         if(this.logoEmpresa && this.logoEmpresa.length > 100) {
             const img = document.getElementById('login-logo-view');
             if(img) {
@@ -113,6 +117,7 @@ const app = {
     },
 
     selectLocation(loc) {
+        console.log("Selecionando Local:", loc);
         this.currentLocation = loc;
         this.collectionName = `towers_${loc}`; 
         document.getElementById('location-screen').style.display = 'none';
@@ -122,22 +127,35 @@ const app = {
     },
 
     // =================================================================
-    // 4. LÓGICA DE DADOS (INTEGRIDADE E FIREBASE)
+    // 4. LÓGICA DE DADOS (CORRIGIDA)
     // =================================================================
     async init() {
         try {
+            console.log("Inicializando Banco de Dados...");
+            
+            // 1. Inicializa Firebase
             if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
             this.db = firebase.firestore();
-            await idb.open();
 
-            // Listener Tempo Real do Firebase
+            // 2. Inicializa Banco Local (IndexedDB) - CORREÇÃO PRINCIPAL
+            // Cria a tabela 'towers' se não existir
+            this.dbLocal = await idb.openDB('gestao-torres-db', 1, {
+                upgrade(db) {
+                    if (!db.objectStoreNames.contains('towers')) {
+                        db.createObjectStore('towers', { keyPath: 'id' });
+                    }
+                },
+            });
+            console.log("Banco Local (IDB) Conectado.");
+
+            // 3. Listener Tempo Real do Firebase
             this.db.collection(this.collectionName).onSnapshot((snapshot) => {
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 
                 if (!snapshot.empty) {
+                    console.log("Dados recebidos da Nuvem. Atualizando...");
                     const cloudData = [];
-                    // CORREÇÃO: Injeta o identificador da coleção para o backup local
                     snapshot.forEach(doc => {
                         let data = doc.data();
                         data._collection = this.collectionName; 
@@ -148,19 +166,19 @@ const app = {
                     this.updateLocalBackup(cloudData);
                     this.renderList();
                 } else {
-                    // Se o banco estiver vazio (seu caso atual), cria os dados
+                    console.log("Nuvem vazia. Verificando integridade ou criando dados...");
                     this.checkDataIntegrity();
                 }
             }, (error) => {
-                console.log("Modo Offline.");
+                console.warn("Modo Offline ou Erro de Permissão:", error);
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 this.loadFromLocal();
             });
 
         } catch (e) {
-            console.error("Erro init:", e);
-            this.loadFromLocal();
+            console.error("ERRO FATAL NO INIT:", e);
+            alert("Erro ao iniciar sistema: " + e.message);
         }
 
         this.updateOnlineStatus();
@@ -171,15 +189,16 @@ const app = {
 
     async checkDataIntegrity() {
         // Verifica se já existem dados locais PARA ESSA LOCALIDADE
-        const localData = await idb.getAll('towers');
-        const currentLocData = localData.filter(t => t._collection === this.collectionName);
+        const allData = await this.dbLocal.getAll('towers');
+        const currentLocData = allData.filter(t => t._collection === this.collectionName);
 
         if (currentLocData.length > 0) {
+            console.log("Usando dados locais.");
             this.towers = currentLocData;
             // Se tiver dados locais mas o Firebase estiver vazio, sincroniza pra cima (upload)
             if(navigator.onLine && this.userRole === 'admin') this.syncNow();
         } else {
-            // Se não tem nada (nem local, nem nuvem), cria do zero
+            console.log("Sem dados locais nem na nuvem. Criando Seed...");
             await this.seedDatabase(); 
         }
         this.renderList();
@@ -187,26 +206,35 @@ const app = {
 
     async loadFromLocal() {
         document.getElementById('loading-msg').style.display = 'none';
-        const allData = await idb.getAll('towers');
-        // Filtra apenas dados desta coleção para não misturar cidades
+        if (!this.dbLocal) return; // Segurança
+
+        const allData = await this.dbLocal.getAll('towers');
         this.towers = allData.filter(t => t._collection === this.collectionName);
         
         if(this.towers.length === 0) await this.seedDatabase();
         this.renderList();
     },
 
-    // Salva localmente preservando dados de OUTRAS cidades
     async updateLocalBackup(data) {
-        const allData = await idb.getAll('towers');
+        if (!this.dbLocal) return;
+
+        // Pega tudo para não apagar outras cidades
+        const allData = await this.dbLocal.getAll('towers');
         const otherLocationsData = allData.filter(t => t._collection !== this.collectionName);
         const newDataToSave = [...otherLocationsData, ...data];
 
-        await idb.clear('towers');
-        for (const t of newDataToSave) await idb.put('towers', t);
+        // Transação para salvar
+        const tx = this.dbLocal.transaction('towers', 'readwrite');
+        await tx.store.clear();
+        for (const t of newDataToSave) {
+            await tx.store.put(t);
+        }
+        await tx.done;
     },
 
-    // CRIAÇÃO INICIAL DAS TORRES (Restauração do Banco)
+    // CRIAÇÃO INICIAL DAS TORRES
     async seedDatabase() {
+        console.log("Executando SeedDatabase para", this.collectionName);
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
         
@@ -221,8 +249,8 @@ const app = {
         for (let i = 1; i <= totalTowers; i++) {
             const idStr = i.toString().padStart(2, '0');
             const tower = {
-                id: i,
-                _collection: this.collectionName, // Identificador vital
+                id: i, // ID simples (1, 2, 3...)
+                _collection: this.collectionName, 
                 nome: `ER ${idStr}`,
                 status: "Operando",
                 geral: { localizacao: "", prioridade: "Média", tecnico: "", ultimaCom: "" },
@@ -233,8 +261,9 @@ const app = {
             };
             this.towers.push(tower);
 
-            // Prepara para enviar ao Firebase se for Admin
             if(batch && this.userRole === 'admin') {
+                // IDs no Firebase devem ser únicos globalmente ou dentro da coleção
+                // Aqui usamos o ID numérico como chave do documento
                 const docRef = this.db.collection(this.collectionName).doc(String(i));
                 batch.set(docRef, tower);
             }
@@ -243,13 +272,13 @@ const app = {
         // Salva backup local
         await this.updateLocalBackup(this.towers);
         
-        // Envia para o Firebase (Recria o banco deletado)
+        // Envia para o Firebase
         if(batch && this.userRole === 'admin') {
             try { 
                 await batch.commit(); 
-                console.log(`Banco de dados recriado para: ${this.collectionName}`);
+                console.log(`Sucesso! Banco de dados criado no Firebase.`);
             } catch(e) { 
-                console.log("Erro ao salvar no Firebase (Offline ou sem permissão)"); 
+                console.error("Erro ao salvar no Firebase:", e); 
             }
         }
         this.renderList();
@@ -261,7 +290,11 @@ const app = {
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
-        if(!list || list.length === 0) return;
+        
+        if(!list || list.length === 0) {
+            container.innerHTML = '<p style="text-align:center; width:100%; color:#666;">Nenhuma torre encontrada.</p>';
+            return;
+        }
 
         list.sort((a, b) => a.id - b.id);
 
@@ -269,9 +302,9 @@ const app = {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
             
-            const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
-                             (t.pendencias.servico && t.pendencias.servico.length > 1) || 
-                             (t.falhas.detectada && t.falhas.detectada.length > 1) ||
+            const hasAlert = (t.pendencias && t.pendencias.material && t.pendencias.material.length > 1) || 
+                             (t.pendencias && t.pendencias.servico && t.pendencias.servico.length > 1) || 
+                             (t.falhas && t.falhas.detectada && t.falhas.detectada.length > 1) ||
                              t.status === "Falha";
             
             const alertHTML = hasAlert ? `<div class="warning-alert">⚠️ Pendências encontradas</div>` : '';
@@ -309,7 +342,7 @@ const app = {
                         </div>
                     </div>
                     ${t.observacoes ? `<div class="obs-box">"${t.observacoes}"</div>` : ''}
-                    ${t.fotos.length > 0 ? `<div style="margin-top:10px; color:blue; font-weight:bold">📷 ${t.fotos.length} fotos</div>` : ''}
+                    ${t.fotos && t.fotos.length > 0 ? `<div style="margin-top:10px; color:blue; font-weight:bold">📷 ${t.fotos.length} fotos</div>` : ''}
                 </div>
                 <div class="card-footer">
                     <button class="btn-card btn-pdf-single" onclick="app.generatePDF(${t.id})">PDF</button>
@@ -319,7 +352,6 @@ const app = {
             container.appendChild(div);
         });
 
-        // Atualiza contador se existir
         const totalCard = document.getElementById('total-card');
         if(totalCard) totalCard.innerText = list.length;
     },
@@ -334,7 +366,7 @@ const app = {
         
         const tower = {
             id: id,
-            _collection: this.collectionName, // Garante integridade
+            _collection: this.collectionName,
             nome: document.getElementById('f-nome').value,
             status: document.getElementById('f-status').value,
             geral: {
@@ -366,7 +398,6 @@ const app = {
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
         
-        // Salva backup seguro
         await this.updateLocalBackup(this.towers);
 
         this.closeModal();
@@ -374,7 +405,7 @@ const app = {
 
         if (navigator.onLine && this.db) {
             try { await this.db.collection(this.collectionName).doc(String(id)).set(tower); }
-            catch (error) { console.error(error); }
+            catch (error) { console.error("Erro ao salvar no Firebase:", error); }
         }
     },
 
