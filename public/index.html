@@ -3,556 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gestão de Torres - V2</title>
-    
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <title>Gestão de Torres</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon-192.png">
 
-    <style>
-        :root {
-            --primary: #0056b3;       /* Azul Institucional */
-            --primary-dark: #004494;
-            --secondary: #6c757d;     /* Cinza */
-            --success: #28a745;       /* Verde */
-            --danger: #dc3545;        /* Vermelho */
-            --warning: #ffc107;       /* Amarelo */
-            --light: #f8f9fa;         /* Fundo Claro */
-            --dark: #343a40;          /* Texto Escuro */
-            --shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-        body { 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            background-color: #f4f6f8; 
-            margin: 0; 
-            padding: 0; 
-            color: var(--dark);
-            -webkit-font-smoothing: antialiased;
-        }
-        
-        /* --- Utilitários --- */
-        .hidden { display: none !important; }
-        
-        .btn { 
-            padding: 10px 16px; 
-            border: none; 
-            border-radius: 6px; 
-            cursor: pointer; 
-            font-weight: 600; 
-            font-size: 14px;
-            transition: all 0.2s; 
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .btn:active { transform: translateY(1px); box-shadow: none; }
-        
-        .btn-primary { background-color: var(--primary); color: white; }
-        .btn-primary:hover { background-color: var(--primary-dark); }
-        
-        .btn-success { background-color: var(--success); color: white; }
-        .btn-danger { background-color: var(--danger); color: white; }
-        .btn-secondary { background-color: var(--secondary); color: white; }
-
-        /* --- Status de Conexão --- */
-        .status-badge { 
-            position: fixed; 
-            bottom: 15px; 
-            right: 15px; 
-            padding: 6px 14px; 
-            border-radius: 20px; 
-            font-size: 12px; 
-            font-weight: bold; 
-            z-index: 9999; 
-            box-shadow: var(--shadow);
-            transition: background-color 0.3s;
-        }
-        .status-badge.online { background-color: var(--success); color: white; }
-        .status-badge.offline { background-color: var(--secondary); color: white; }
-
-        /* --- Telas de Login e Seleção --- */
-        .fullscreen-center { 
-            min-height: 100vh; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
-            background: linear-gradient(135deg, var(--primary), #003d80); 
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        
-        .login-box { 
-            background: white; 
-            padding: 40px 30px; 
-            border-radius: 12px; 
-            color: var(--dark); 
-            width: 100%; 
-            max-width: 400px; 
-            text-align: center; 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
-        }
-        
-        .login-logo { 
-            max-width: 200px; 
-            max-height: 100px;
-            margin-bottom: 25px; 
-            display: none; /* JS ativa se tiver logo */
-            margin-left: auto; 
-            margin-right: auto; 
-        }
-        
-        .input-group { margin-bottom: 20px; text-align: left; }
-        .input-group label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #555; }
-        .input-group input { 
-            width: 100%; 
-            padding: 12px; 
-            border: 1px solid #ced4da; 
-            border-radius: 6px; 
-            font-size: 16px;
-            box-sizing: border-box; 
-            transition: border-color 0.2s;
-        }
-        .input-group input:focus { border-color: var(--primary); outline: none; }
-        
-        .location-grid { 
-            display: grid; 
-            grid-template-columns: repeat(2, 1fr); 
-            gap: 15px; 
-            width: 100%; 
-            margin-top: 25px; 
-        }
-        
-        .btn-loc { 
-            padding: 20px; 
-            background: #fff; 
-            border: 2px solid #e9ecef; 
-            color: var(--primary); 
-            border-radius: 10px; 
-            font-weight: 700; 
-            cursor: pointer; 
-            transition: all 0.2s; 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .btn-loc:hover { 
-            border-color: var(--primary); 
-            background: #f0f7ff; 
-            transform: translateY(-2px);
-        }
-        .btn-loc small { font-weight: normal; color: var(--secondary); margin-top: 5px; font-size: 12px; }
-
-        /* --- App Principal --- */
-        #app-content { display: none; padding-bottom: 60px; }
-        
-        .app-header { 
-            background: white; 
-            padding: 15px 20px; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            position: sticky; 
-            top: 0; 
-            z-index: 100; 
-        }
-        .header-title h1 { margin: 0; font-size: 18px; color: var(--dark); }
-        .header-title span { font-size: 12px; color: var(--secondary); display: block; margin-top: 2px;}
-        
-        .toolbar { 
-            padding: 15px 20px; 
-            background-color: #fff;
-            border-bottom: 1px solid #eee;
-            display: flex; 
-            flex-direction: column;
-            gap: 15px; 
-        }
-        @media (min-width: 768px) {
-            .toolbar { flex-direction: row; justify-content: space-between; }
-        }
-
-        .search-box { flex: 1; position: relative; width: 100%; }
-        .search-box input { 
-            width: 100%; 
-            padding: 12px 15px 12px 40px; 
-            border-radius: 25px; 
-            border: 1px solid #ddd; 
-            outline: none; 
-            background: #f8f9fa;
-            box-sizing: border-box;
-        }
-        .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #aaa; }
-        
-        .action-buttons { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px; }
-        .action-buttons button { white-space: nowrap; }
-
-        .stats-bar { padding: 15px 20px 5px 20px; font-size: 13px; color: var(--secondary); display: flex; justify-content: space-between; align-items: center;}
-
-        /* --- Grid de Cards --- */
-        .tower-grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
-            gap: 20px; 
-            padding: 20px; 
-        }
-        
-        .card { 
-            background: white; 
-            border-radius: 12px; 
-            box-shadow: var(--shadow); 
-            overflow: hidden; 
-            transition: transform 0.2s; 
-            border-left: 5px solid var(--secondary); 
-            display: flex;
-            flex-direction: column;
-        }
-        .card:hover { transform: translateY(-3px); }
-        
-        /* Status Cores */
-        .st-Operando { border-left-color: var(--success); }
-        .st-Falha { border-left-color: var(--danger); }
-        .st-Manutenção { border-left-color: var(--warning); }
-        .st-Desativada { border-left-color: var(--secondary); }
-
-        .card-header { padding: 12px 15px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; background: #fff; }
-        .status-pill { padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700; background: #f0f2f5; color: #555; text-transform: uppercase; }
-        
-        .warning-alert { background: #fff3cd; color: #856404; padding: 10px 15px; font-size: 12px; border-bottom: 1px solid #ffeeba; display: flex; align-items: center; gap: 8px; font-weight: bold; }
-        
-        .card-body { padding: 15px; font-size: 13px; flex-grow: 1; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .info-item { display: flex; flex-direction: column; }
-        .info-label { color: #888; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;}
-        .info-value { font-weight: 600; color: #333; font-size: 13px; }
-        .text-red { color: var(--danger); font-weight: bold; }
-        
-        .divider { grid-column: 1 / -1; height: 1px; background: #eee; margin: 8px 0; }
-        .obs-box { margin-top: 12px; background: #fff8e1; padding: 10px; border-radius: 6px; font-style: italic; color: #666; border: 1px solid #ffeeba; font-size: 12px; }
-
-        .card-footer { padding: 12px 15px; background: #f8f9fa; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 10px; }
-        .btn-card { padding: 6px 14px; border: 1px solid #ddd; background: white; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: 0.2s; color: #555; }
-        .btn-card:hover { background-color: #eee; }
-        .btn-edit { color: var(--primary); border-color: var(--primary); }
-        .btn-edit:hover { background-color: var(--primary); color: white; }
-        .btn-pdf-single { color: var(--danger); border-color: var(--danger); }
-        .btn-pdf-single:hover { background-color: var(--danger); color: white; }
-
-        /* --- Modal --- */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; overflow-y: auto; backdrop-filter: blur(3px); }
-        .modal-content { background: white; margin: 20px auto; padding: 0; width: 95%; max-width: 800px; border-radius: 12px; position: relative; box-shadow: 0 15px 40px rgba(0,0,0,0.2); animation: slideUp 0.3s ease; }
-        
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-        .modal-header { padding: 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        .modal-header h2 { margin: 0; font-size: 18px; color: var(--primary); display: flex; align-items: center; gap: 10px; }
-        .close { font-size: 28px; cursor: pointer; color: #aaa; transition: 0.2s; line-height: 1; }
-        .close:hover { color: var(--danger); }
-        
-        .modal-body { padding: 20px; }
-
-        .form-section { margin-bottom: 25px; border: 1px solid #e9ecef; padding: 20px; border-radius: 8px; background: #fff; }
-        .form-section h3 { margin-top: 0; color: #495057; font-size: 15px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 15px; text-transform: uppercase; font-weight: 700; }
-        
-        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 10px; }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600; }
-        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; box-sizing: border-box; font-size: 14px; background-color: #fff; }
-        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(0,86,179,0.1); }
-        
-        .photo-area { margin-top: 10px; border: 2px dashed #ced4da; padding: 20px; text-align: center; border-radius: 8px; background: #f8f9fa; transition: 0.2s; }
-        .photo-area:hover { border-color: var(--primary); background: #f0f7ff; }
-        
-        .preview-container { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; justify-content: center; }
-        .photo-wrapper { position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .img-preview { width: 100%; height: 100%; object-fit: cover; }
-        .btn-delete-photo { position: absolute; top: 2px; right: 2px; background: rgba(220, 53, 69, 0.9); color: white; border-radius: 50%; width: 20px; height: 20px; text-align: center; line-height: 18px; cursor: pointer; font-size: 12px; font-weight: bold; }
-
-        /* --- Checklist --- */
-        #checklist-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f4f6f8; z-index: 2000; flex-direction: column; overflow-y: auto; }
-        .chk-header { background: var(--primary); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .chk-body { padding: 20px; max-width: 900px; margin: 0 auto; width: 100%; box-sizing: border-box; background: white; margin-top: 20px; border-radius: 10px; box-shadow: 0 2px 15px rgba(0,0,0,0.05); margin-bottom: 40px; }
-        
-        .chk-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #eee; }
-        
-        .check-section { background: #e9ecef; padding: 12px 15px; margin: 30px 0 10px 0; font-weight: bold; border-radius: 5px; color: var(--dark); border-left: 5px solid var(--primary); font-size: 15px; }
-        .chk-row { display: flex; flex-wrap: wrap; align-items: flex-start; padding: 15px 0; border-bottom: 1px solid #eee; gap: 15px; }
-        .chk-row:last-child { border-bottom: none; }
-        
-        .chk-title { flex: 2; min-width: 250px; font-size: 14px; font-weight: 500; padding-top: 5px; }
-        .chk-controls { flex: 1; min-width: 180px; }
-        .chk-comment { flex: 1; min-width: 180px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
-        
-        .radio-group { display: flex; gap: 5px; background: #fff; padding: 4px; border-radius: 6px; border: 1px solid #ddd; width: fit-content; }
-        .radio-label { 
-            font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 4px; transition: 0.2s; 
-        }
-        .radio-label:hover { background-color: #f0f0f0; }
-        .radio-label input { margin: 0; }
-        
-        .signature-area { margin-top: 40px; border: 1px solid #ddd; padding: 20px; border-radius: 8px; background: #fafafa; }
-        .signature-pad-wrapper { border: 2px dashed #bbb; height: 200px; background: #fff; position: relative; margin-top: 15px; border-radius: 5px; touch-action: none; cursor: crosshair; }
-        canvas { width: 100%; height: 100%; display: block; }
-
-        /* Loader Animation */
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 
-    <div id="connection-status" class="status-badge online">Conectado</div>
-
-    <div id="login-screen" class="fullscreen-center">
+    <div id="login-screen" class="login-overlay">
         <div class="login-box">
-            <img id="login-logo-view" class="login-logo" src="" alt="Logo Empresa">
-            <h2 style="color:var(--primary); margin-bottom: 5px;">Gestão de Torres</h2>
-            <p style="color: #888; margin-bottom: 25px; font-size: 13px;">Sistema de Manutenção Preventiva</p>
-            
-            <div class="input-group">
-                <label>Usuário</label>
-                <input type="text" id="login-user" placeholder="Digite seu usuário">
+            <img id="login-logo-view" class="login-logo-img" alt="Logo" style="display:none;">
+            <div class="menu-header"><h2>🔐 Acesso Restrito</h2><p>Identifique-se</p></div>
+            <div class="login-form">
+                <input type="text" id="login-user" placeholder="Usuário">
+                <input type="password" id="login-pass" placeholder="Senha">
+                <button class="btn-login-admin" onclick="app.checkLogin()">Entrar Admin</button>
             </div>
-            <div class="input-group">
-                <label>Senha</label>
-                <input type="password" id="login-pass" placeholder="Digite sua senha">
-            </div>
-            
-            <button class="btn btn-primary" onclick="app.checkLogin()" style="width:100%; margin-top:10px;">
-                <span class="material-icons">login</span> Entrar
-            </button>
-            
-            <div style="margin: 25px 0; border-top: 1px solid #eee;"></div>
-            
-            <button class="btn btn-secondary" onclick="app.visitorLogin()" style="width:100%; background:#6c757d;">
-                <span class="material-icons">visibility</span> Acesso Visitante
-            </button>
-        </div>
-        <p style="margin-top: 20px; font-size: 11px; opacity: 0.7;">Versão 3.0 (IDB + Firebase)</p>
-    </div>
-
-    <div id="location-screen" class="fullscreen-center hidden">
-        <div class="login-box" style="max-width: 600px;">
-            <h3 style="color:var(--primary)">Selecione a Unidade</h3>
-            <p style="color:#666; margin-bottom:25px; font-size:14px;">Escolha a base operacional para carregar os dados:</p>
-            
-            <div class="location-grid">
-                <button class="btn-loc" onclick="app.selectLocation('MSG')">
-                    <span class="material-icons" style="font-size:36px; color:#28a745; margin-bottom:8px;">dns</span>
-                    MSG
-                    <small>Crixás - GO</small>
-                </button>
-                <button class="btn-loc" onclick="app.selectLocation('QUEIROZ')">
-                    <span class="material-icons" style="font-size:36px; color:#dc3545; margin-bottom:8px;">factory</span>
-                    QUEIROZ
-                    <small>Raposos - MG</small>
-                </button>
-                <button class="btn-loc" onclick="app.selectLocation('CUIABA')">
-                    <span class="material-icons" style="font-size:36px; color:#ffc107; margin-bottom:8px;">terrain</span>
-                    CUIABÁ
-                    <small>Sabará - MG</small>
-                </button>
-                <button class="btn-loc" onclick="app.selectLocation('RPX')">
-                    <span class="material-icons" style="font-size:36px; color:#17a2b8; margin-bottom:8px;">construction</span>
-                    RPX
-                    <small>Raposos - MG</small>
-                </button>
-            </div>
-            
-            <button class="btn btn-danger" style="margin-top:30px; width: 100%;" onclick="location.reload()">
-                <span class="material-icons">arrow_back</span> Sair do Sistema
-            </button>
+            <div class="divider-text">ou</div>
+            <button class="btn-login-visitor" onclick="app.visitorLogin()">Entrar Visitante</button>
         </div>
     </div>
 
-    <div id="app-content">
-        <div class="app-header">
-            <div class="header-title">
-                <h1>Painel de Controle</h1>
-                <span>Unidade: <strong id="current-loc-badge" style="color:var(--primary)">---</strong></span>
-            </div>
-            <div class="header-controls">
-                <button class="btn btn-danger" onclick="location.reload()" style="padding: 6px 12px; font-size: 12px;">
-                    <span class="material-icons" style="font-size: 16px;">logout</span> Sair
-                </button>
+    <div id="location-screen" class="login-overlay" style="display:none;">
+        <div class="login-box">
+            <div class="menu-header"><h2>📍 Unidade</h2><p>Selecione o local de trabalho</p></div>
+            <div class="menu-buttons">
+                <button class="btn-location" onclick="app.selectLocation('QUEIROZ')"><span class="loc-name">Queiroz</span><span class="loc-city">Raposos - MG</span><span class="loc-count">25 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('CUIABA')"><span class="loc-name">Cuiabá</span><span class="loc-city">Sabará - MG</span><span class="loc-count">25 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('MSG')"><span class="loc-name">MSG</span><span class="loc-city">Crixás - GO</span><span class="loc-count">07 Torres</span></button>
+                <button class="btn-location" onclick="app.selectLocation('CDS')"><span class="loc-name">CDS</span><span class="loc-city">Santa Bárbara - MG</span><span class="loc-count">25 Torres</span></button>
             </div>
         </div>
+    </div>
 
-        <div class="toolbar">
-            <div class="search-box">
-                <span class="material-icons search-icon">search</span>
-                <input type="text" id="search" placeholder="Buscar torre..." onkeyup="app.filterList()">
+    <div id="app-content" style="display:none;">
+        <header>
+            <div class="header-top"><h1><span id="current-loc-badge" class="loc-badge">...</span> Painel <span id="connection-status" class="status-badge online">...</span></h1></div>
+            <div class="header-actions">
+                <button id="btn-new-checklist" class="btn-action btn-checklist" onclick="app.openChecklist()">📋 Checklist</button>
+                <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Geral</button>
+                <button class="btn-month-pdf" onclick="app.generateMonthlyPDF()">📅 Mensal</button>
+                <button class="btn-sync" onclick="app.syncNow()">🔄 Sync</button>
+                <button class="btn-exit" onclick="window.location.reload()">Sair</button>
             </div>
-            <div class="action-buttons">
-                <button class="btn btn-success" id="btn-new-checklist" onclick="app.openChecklist()">
-                    <span class="material-icons">playlist_add</span> Checklist
-                </button>
-                <button class="btn btn-primary" onclick="app.generateGlobalPDF()">
-                    <span class="material-icons">description</span> Rel. Geral
-                </button>
-                <button class="btn btn-secondary" onclick="app.generateMonthlyPDF()">
-                    <span class="material-icons">date_range</span> Rel. Mensal
-                </button>
+        </header>
+
+        <div class="container">
+            <input type="text" id="search" class="search-bar" placeholder="🔍 Buscar torre..." onkeyup="app.filterList()">
+            <div id="loading-msg" style="text-align:center; padding:20px; color:#666;">Carregando dados...</div>
+            <div id="tower-list" class="tower-list"></div>
+        </div>
+    </div>
+
+    <div id="checklist-screen" class="checklist-overlay" style="display:none;">
+        <div class="checklist-header"><button onclick="app.closeChecklist()" class="btn-back">← Voltar</button><h2>Checklist</h2><button onclick="app.generateChecklistPDF()" class="btn-save-check">Gerar PDF</button></div>
+        <div class="checklist-content">
+            <div class="check-section">
+                <h3>Dados</h3>
+                <div class="two-col"><div><label>Data</label><input type="date" id="chk-data"></div><div><label>Início</label><input type="time" id="chk-hora-inicio"></div></div>
+                <div class="two-col"><div><label>Clima</label><select id="chk-clima"><option>Ensolarado</option><option>Nublado</option><option>Chuvoso</option></select></div><div><label>Recurso</label><select id="chk-recurso"><option>Veículo 4x4</option><option>Cesto</option><option>A pé</option></select></div></div>
+                <label>Executantes</label><input type="text" id="chk-executantes">
+            </div>
+            <div id="checklist-items-container"></div>
+            <div class="check-section">
+                <h3>Finalização</h3>
+                <div style="margin-bottom:15px"><label style="font-weight:bold; color:#0056b3">Horário Término:</label><input type="time" id="chk-hora-fim" style="width:100%; padding:10px; font-size:1.1rem; border:1px solid #ccc; border-radius:6px;"></div>
+                <h3>Assinatura (TECAL)</h3><div class="signature-pad-wrapper"><canvas id="signature-pad"></canvas></div>
+                <button type="button" class="btn-clear-sig" onclick="app.clearSignature()">Limpar</button>
+                <label style="margin-top:10px">Nome</label><input type="text" id="chk-ass-nome"><label>Matrícula</label><input type="text" id="chk-ass-mat">
             </div>
         </div>
-
-        <div class="stats-bar">
-            <span>Total de Torres: <strong id="total-card" style="color:var(--dark)">0</strong></span>
-            <span id="loading-msg" style="color: var(--primary); font-weight: bold; font-size:12px;">
-                <span class="material-icons" style="font-size:12px; vertical-align:middle; animation: spin 1s infinite linear;">autorenew</span> Sincronizando...
-            </span>
-        </div>
-
-        <div id="tower-list" class="tower-grid">
-            </div>
     </div>
 
     <div id="modal" class="modal">
         <div class="modal-content">
-            <div class="modal-header">
-                <h2><span class="material-icons">edit</span> Editar Torre</h2>
-                <span class="close" onclick="app.closeModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <form id="tower-form" onsubmit="app.saveTower(event)">
-                    <input type="hidden" id="tower-id">
-                    
-                    <div class="form-section">
-                        <h3>Identificação & Status</h3>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Nome da Torre</label>
-                                <input type="text" id="f-nome" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Status Atual</label>
-                                <select id="f-status">
-                                    <option value="Operando">Operando (Verde)</option>
-                                    <option value="Manutenção">Manutenção (Amarelo)</option>
-                                    <option value="Falha">Falha (Vermelho)</option>
-                                    <option value="Desativada">Desativada (Cinza)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Informações Gerais</h3>
-                        <div class="form-row">
-                            <div class="form-group"><label>Localização (Lat/Long ou Ref)</label><input type="text" id="f-geral-local"></div>
-                            <div class="form-group"><label>Prioridade</label>
-                                <select id="f-geral-prio">
-                                    <option value="Baixa">Baixa</option>
-                                    <option value="Média">Média</option>
-                                    <option value="Alta">Alta</option>
-                                </select>
-                            </div>
-                            <div class="form-group"><label>Técnico Responsável</label><input type="text" id="f-geral-tec"></div>
-                            <div class="form-group"><label>Última Comunicação</label><input type="datetime-local" id="f-geral-ultimacom"></div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Controle de Falhas</h3>
-                        <div class="form-group"><label>Falha Detectada (Descrição Curta)</label><input type="text" id="f-falhas-detectada" placeholder="Ex: Rádio inoperante"></div>
-                        <div class="form-group"><label>Histórico da Falha</label><textarea id="f-falhas-historico" rows="2"></textarea></div>
-                        <div class="form-group"><label>Ação Corretiva Tomada</label><input type="text" id="f-falhas-acao"></div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Dados de Manutenção</h3>
-                        <div class="form-row">
-                            <div class="form-group"><label>Data Última Manut.</label><input type="date" id="f-manu-ultima"></div>
-                            <div class="form-group"><label>Previsão Próxima</label><input type="date" id="f-manu-proxima"></div>
-                            <div class="form-group"><label>Custo Estimado (R$)</label><input type="text" id="f-manu-custo"></div>
-                        </div>
-                        <div class="form-group"><label>Peças Trocadas/Utilizadas</label><input type="text" id="f-manu-pecas"></div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Pendências</h3>
-                        <div class="form-group"><label>Pendência de Serviço</label><input type="text" id="f-pend-servico"></div>
-                        <div class="form-group"><label>Pendência de Material</label><input type="text" id="f-pend-material"></div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Fotos & Observações</h3>
-                        <div class="form-group"><label>Observações Gerais</label><textarea id="f-obs" rows="3"></textarea></div>
-                        
-                        <div class="photo-area">
-                            <p style="margin-bottom: 10px; font-weight: bold; color: #666;">
-                                <span class="material-icons" style="vertical-align: middle;">add_a_photo</span> Clique para Adicionar Fotos
-                            </p>
-                            <input type="file" accept="image/*" multiple onchange="app.handleImagePreview(event)" style="display:none;" id="photo-input">
-                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('photo-input').click()">Selecionar Arquivos</button>
-                            <div id="image-preview-container" class="preview-container"></div>
-                        </div>
-                    </div>
-
-                    <button type="submit" class="btn btn-success" style="width:100%; margin-top:20px; padding: 15px; font-size: 16px;">
-                        <span class="material-icons">save</span> Salvar Alterações
-                    </button>
-                </form>
-            </div>
+             <div class="modal-header"><h2 id="modal-title">Editar Torre</h2><span class="close" onclick="app.closeModal()">&times;</span></div>
+            <form id="tower-form" onsubmit="app.saveTower(event)">
+                <input type="hidden" id="tower-id">
+                <div class="form-section"><h3>Principal</h3><label>Nome</label><input type="text" id="f-nome" readonly class="readonly-input"><label>Status</label><select id="f-status"><option value="Operando">Operando</option><option value="Falha">Falha</option><option value="Manutenção">Manutenção</option></select></div>
+                <div class="form-section"><h3>Geral</h3><label>Local</label><input type="text" id="f-geral-local"><div class="two-col"><div><label>Prio</label><select id="f-geral-prio"><option>Média</option><option>Alta</option><option>Baixa</option></select></div><div><label>Tec</label><input type="text" id="f-geral-tec"></div></div><label>Ult. Com.</label><input type="datetime-local" id="f-geral-ultimacom"></div>
+                <div class="form-section"><h3>Falhas</h3><label>Detectada</label><input type="text" id="f-falhas-detectada"><label>Histórico</label><textarea id="f-falhas-historico"></textarea><label>Ação</label><textarea id="f-falhas-acao"></textarea></div>
+                 <div class="form-section"><h3>Manutenção</h3><div class="two-col"><div><label>Ultima</label><input type="date" id="f-manu-ultima"></div><div><label>Próxima</label><input type="date" id="f-manu-proxima"></div></div><label>Custo</label><input type="text" id="f-manu-custo"><label>Peças</label><input type="text" id="f-manu-pecas"></div>
+                <div class="form-section warning-bg"><h3>Pendências</h3><label>Serviço</label><input type="text" id="f-pend-servico"><label>Material</label><input type="text" id="f-pend-material"></div>
+                <div class="form-section"><h3>Fotos</h3><input type="file" id="image-input" multiple onchange="app.handleImagePreview(event)"><div id="image-preview-container" class="image-preview-container"></div></div>
+                <div class="form-section"><h3>Obs</h3><textarea id="f-obs"></textarea></div>
+                <div class="modal-actions sticky-footer"><button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button><button type="submit" class="btn-save">Salvar</button></div>
+            </form>
         </div>
     </div>
 
-    <div id="checklist-screen">
-        <div class="chk-header">
-            <h2 style="margin:0; font-size: 18px; display:flex; align-items:center; gap:10px;">
-                <span class="material-icons">assignment_turned_in</span> Novo Checklist
-            </h2>
-            <button class="btn btn-danger" onclick="app.closeChecklist()">
-                <span class="material-icons">close</span> Fechar
-            </button>
-        </div>
-        <div class="chk-body">
-            <div class="chk-meta-grid">
-                <div class="form-group"><label>Data</label><input type="date" id="chk-data"></div>
-                <div class="form-group"><label>Hora Início</label><input type="time" id="chk-hora-inicio"></div>
-                <div class="form-group"><label>Hora Fim</label><input type="time" id="chk-hora-fim"></div>
-                <div class="form-group"><label>Torre / Equipamento</label><input type="text" id="chk-torre" placeholder="Ex: ER 01"></div>
-                <div class="form-group"><label>Condições Climáticas</label>
-                    <select id="chk-clima">
-                        <option>Ensolarado</option>
-                        <option>Nublado</option>
-                        <option>Chuvoso</option>
-                        <option>Vento Forte</option>
-                    </select>
-                </div>
-                <div class="form-group"><label>Recurso (Veículo/Placa)</label><input type="text" id="chk-recurso"></div>
-                <div class="form-group" style="grid-column: 1 / -1;"><label>Nomes dos Executantes</label><input type="text" id="chk-executantes"></div>
-            </div>
-
-            <div id="checklist-items-container">
-                </div>
-
-            <div class="signature-area">
-                <h3><span class="material-icons" style="vertical-align:middle">draw</span> Assinatura do Responsável</h3>
-                <input type="text" id="chk-ass-nome" placeholder="Digite seu nome completo" style="width:100%; padding:10px; margin-bottom:10px; border: 1px solid #ccc; border-radius: 4px;">
-                <div class="signature-pad-wrapper">
-                    <canvas id="signature-pad"></canvas>
-                </div>
-                <button class="btn btn-secondary" onclick="app.clearSignature()" style="margin-top:10px; font-size: 12px;">Limpar</button>
-            </div>
-
-            <button class="btn btn-success" onclick="app.generateChecklistPDF()" style="width:100%; margin-top:30px; padding: 15px; font-size:18px;">
-                <span class="material-icons">picture_as_pdf</span> Gerar PDF e Finalizar
-            </button>
-            <div style="height:50px"></div>
-        </div>
-    </div>
-
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
-
+    <script src="idb.js"></script>
     <script src="app.js"></script>
-
 </body>
 </html>
