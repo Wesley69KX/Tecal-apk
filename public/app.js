@@ -1,7 +1,11 @@
 const app = {
     // --- ESTADO DO APP ---
-    towers: [], tempPhotos: [], db: null,
-    currentLocation: "", collectionName: "",
+    towers: [], 
+    tempPhotos: [], 
+    db: null,       // Firebase Firestore
+    dbLocal: null,  // Banco Local (IndexedDB)
+    currentLocation: "", 
+    collectionName: "",
     
     // --- CONTROLE DE ACESSO ---
     userRole: "", 
@@ -74,26 +78,16 @@ const app = {
     ],
 
     // =================================================================
-    // 3. SISTEMA DE LOGIN E INICIALIZAÇÃO
+    // 3. INICIALIZAÇÃO
     // =================================================================
     initApp() {
-        // Recupera sessão se existir
-        const savedRole = sessionStorage.getItem('userRole');
-        if (savedRole) {
-            this.userRole = savedRole;
-            // Se já tem local, vai direto, senão tela de local
-            const savedLoc = sessionStorage.getItem('currentLocation');
-            if (savedLoc) {
-                this.selectLocation(savedLoc);
-            } else {
-                this.showLocationScreen();
-            }
-        }
-
-        // Exibe logo
+        console.log("App Iniciado");
         if(this.logoEmpresa && this.logoEmpresa.length > 100) {
             const img = document.getElementById('login-logo-view');
-            if(img) { img.src = this.logoEmpresa; img.style.display = 'block'; }
+            if(img) {
+                img.src = this.logoEmpresa;
+                img.style.display = 'block';
+            }
         }
     },
 
@@ -102,7 +96,6 @@ const app = {
         const p = document.getElementById('login-pass').value;
         if (u === this.adminUser && p === this.adminPass) {
             this.userRole = 'admin';
-            sessionStorage.setItem('userRole', 'admin');
             this.showLocationScreen();
         } else {
             alert("Login Inválido!");
@@ -111,14 +104,12 @@ const app = {
 
     visitorLogin() {
         this.userRole = 'visitor';
-        sessionStorage.setItem('userRole', 'visitor');
         this.showLocationScreen();
     },
 
     showLocationScreen() {
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('location-screen').style.display = 'flex';
-        // Se for visitante, esconde botão de checklist
         if(this.userRole === 'visitor') {
             const btn = document.getElementById('btn-new-checklist');
             if(btn) btn.style.display = 'none';
@@ -126,49 +117,68 @@ const app = {
     },
 
     selectLocation(loc) {
+        console.log("Selecionando Local:", loc);
         this.currentLocation = loc;
-        this.collectionName = `towers_${loc}`;
-        sessionStorage.setItem('currentLocation', loc);
-        
+        this.collectionName = `towers_${loc}`; 
         document.getElementById('location-screen').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
         document.getElementById('current-loc-badge').innerText = loc;
-        
         this.init(); 
     },
 
+    // =================================================================
+    // 4. LÓGICA DE DADOS (CORRIGIDA)
+    // =================================================================
     async init() {
         try {
+            console.log("Inicializando Banco de Dados...");
+            
+            // 1. Inicializa Firebase
             if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
             this.db = firebase.firestore();
-            await idb.open();
 
-            // Listener Tempo Real
+            // 2. Inicializa Banco Local (IndexedDB) - CORREÇÃO PRINCIPAL
+            // Cria a tabela 'towers' se não existir
+            this.dbLocal = await idb.openDB('gestao-torres-db', 1, {
+                upgrade(db) {
+                    if (!db.objectStoreNames.contains('towers')) {
+                        db.createObjectStore('towers', { keyPath: 'id' });
+                    }
+                },
+            });
+            console.log("Banco Local (IDB) Conectado.");
+
+            // 3. Listener Tempo Real do Firebase
             this.db.collection(this.collectionName).onSnapshot((snapshot) => {
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 
                 if (!snapshot.empty) {
+                    console.log("Dados recebidos da Nuvem. Atualizando...");
                     const cloudData = [];
-                    snapshot.forEach(doc => cloudData.push(doc.data()));
+                    snapshot.forEach(doc => {
+                        let data = doc.data();
+                        data._collection = this.collectionName; 
+                        cloudData.push(data);
+                    });
+                    
                     this.towers = cloudData;
                     this.updateLocalBackup(cloudData);
                     this.renderList();
                 } else {
-                    // SE NUVEM VAZIA -> GERA DADOS
-                    console.log("Banco vazio, gerando dados...");
-                    this.seedDatabase();
+                    console.log("Nuvem vazia. Verificando integridade ou criando dados...");
+                    this.checkDataIntegrity();
                 }
             }, (error) => {
-                console.log("Modo Offline.");
+                console.warn("Modo Offline ou Erro de Permissão:", error);
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 this.loadFromLocal();
             });
 
         } catch (e) {
-            console.error("Erro init (Verifique Chaves):", e);
-            this.loadFromLocal();
+            console.error("ERRO FATAL NO INIT:", e);
+            alert("Erro ao iniciar sistema: " + e.message);
         }
 
         this.updateOnlineStatus();
@@ -177,37 +187,70 @@ const app = {
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
     },
 
-    // Carrega do LocalDB e SE VAZIO, CRIA
-    async loadFromLocal() {
-        document.getElementById('loading-msg').style.display = 'none';
-        this.towers = await idb.getAll('towers');
-        
-        if(this.towers.length === 0) {
-            console.log("Local vazio, criando seeds...");
-            await this.seedDatabase(); // GERAÇÃO FORÇADA
+    async checkDataIntegrity() {
+        // Verifica se já existem dados locais PARA ESSA LOCALIDADE
+        const allData = await this.dbLocal.getAll('towers');
+        const currentLocData = allData.filter(t => t._collection === this.collectionName);
+
+        if (currentLocData.length > 0) {
+            console.log("Usando dados locais.");
+            this.towers = currentLocData;
+            // Se tiver dados locais mas o Firebase estiver vazio, sincroniza pra cima (upload)
+            if(navigator.onLine && this.userRole === 'admin') this.syncNow();
+        } else {
+            console.log("Sem dados locais nem na nuvem. Criando Seed...");
+            await this.seedDatabase(); 
         }
         this.renderList();
     },
 
-    async updateLocalBackup(data) {
-        await idb.clear('towers');
-        for (const t of data) await idb.put('towers', t);
+    async loadFromLocal() {
+        document.getElementById('loading-msg').style.display = 'none';
+        if (!this.dbLocal) return; // Segurança
+
+        const allData = await this.dbLocal.getAll('towers');
+        this.towers = allData.filter(t => t._collection === this.collectionName);
+        
+        if(this.towers.length === 0) await this.seedDatabase();
+        this.renderList();
     },
 
-    // --- CRIAÇÃO DE DADOS (SEED) ---
+    async updateLocalBackup(data) {
+        if (!this.dbLocal) return;
+
+        // Pega tudo para não apagar outras cidades
+        const allData = await this.dbLocal.getAll('towers');
+        const otherLocationsData = allData.filter(t => t._collection !== this.collectionName);
+        const newDataToSave = [...otherLocationsData, ...data];
+
+        // Transação para salvar
+        const tx = this.dbLocal.transaction('towers', 'readwrite');
+        await tx.store.clear();
+        for (const t of newDataToSave) {
+            await tx.store.put(t);
+        }
+        await tx.done;
+    },
+
+    // CRIAÇÃO INICIAL DAS TORRES
     async seedDatabase() {
+        console.log("Executando SeedDatabase para", this.collectionName);
         const nowStr = new Date().toISOString();
         const batch = this.db ? this.db.batch() : null;
         
         let totalTowers = 25; 
         if (this.currentLocation === 'MSG') totalTowers = 7; 
+        if (this.currentLocation === 'QUEIROZ') totalTowers = 20;
+        if (this.currentLocation === 'CUIABA') totalTowers = 10;
+        if (this.currentLocation === 'RPX') totalTowers = 3;
 
         this.towers = [];
 
         for (let i = 1; i <= totalTowers; i++) {
             const idStr = i.toString().padStart(2, '0');
             const tower = {
-                id: i,
+                id: i, // ID simples (1, 2, 3...)
+                _collection: this.collectionName, 
                 nome: `ER ${idStr}`,
                 status: "Operando",
                 geral: { localizacao: "", prioridade: "Média", tecnico: "", ultimaCom: "" },
@@ -216,37 +259,40 @@ const app = {
                 pendencias: { servico: "", material: "" },
                 observacoes: "", fotos: [], updatedAt: nowStr
             };
-            
             this.towers.push(tower);
 
-            // Salva na Nuvem apenas se for Admin e tiver conexão
             if(batch && this.userRole === 'admin') {
+                // IDs no Firebase devem ser únicos globalmente ou dentro da coleção
+                // Aqui usamos o ID numérico como chave do documento
                 const docRef = this.db.collection(this.collectionName).doc(String(i));
                 batch.set(docRef, tower);
             }
         }
         
-        // Salva Localmente (Sempre)
-        await idb.clear('towers');
-        for(const t of this.towers) await idb.put('towers', t);
+        // Salva backup local
+        await this.updateLocalBackup(this.towers);
         
-        // Commit na nuvem se possível
+        // Envia para o Firebase
         if(batch && this.userRole === 'admin') {
-            try { await batch.commit(); } catch(e) { console.log("Erro ao salvar seed na nuvem (offline?)"); }
+            try { 
+                await batch.commit(); 
+                console.log(`Sucesso! Banco de dados criado no Firebase.`);
+            } catch(e) { 
+                console.error("Erro ao salvar no Firebase:", e); 
+            }
         }
-        
-        this.renderList(); // Atualiza a tela imediatamente
+        this.renderList();
     },
 
     // =================================================================
-    // 4. RENDERIZAÇÃO (CARDS ABERTOS/COMPLETOS)
+    // 5. RENDERIZAÇÃO
     // =================================================================
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
         
         if(!list || list.length === 0) {
-            container.innerHTML = '<p style="text-align:center; padding:20px;">Nenhum dado. Recarregue a página.</p>';
+            container.innerHTML = '<p style="text-align:center; width:100%; color:#666;">Nenhuma torre encontrada.</p>';
             return;
         }
 
@@ -256,8 +302,8 @@ const app = {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
             
-            const hasAlert = (t.pendencias && ((t.pendencias.material && t.pendencias.material.length > 1) || 
-                             (t.pendencias.servico && t.pendencias.servico.length > 1))) || 
+            const hasAlert = (t.pendencias && t.pendencias.material && t.pendencias.material.length > 1) || 
+                             (t.pendencias && t.pendencias.servico && t.pendencias.servico.length > 1) || 
                              (t.falhas && t.falhas.detectada && t.falhas.detectada.length > 1) ||
                              t.status === "Falha";
             
@@ -266,12 +312,6 @@ const app = {
             const fmtDate = (d) => (d && d.length > 5) ? new Date(d).toLocaleDateString('pt-BR') : '-';
             const fmtTime = (d) => (d && d.length > 5) ? new Date(d).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '';
             const val = (v) => (v && v.length > 0) ? v : '-';
-
-            // Garante objetos
-            const G = t.geral || {};
-            const M = t.manutencao || {};
-            const F = t.falhas || {};
-            const P = t.pendencias || {};
 
             const editBtn = (this.userRole === 'admin') 
                 ? `<button class="btn-card btn-edit" onclick="app.editTower(${t.id})">Editar</button>` 
@@ -285,20 +325,20 @@ const app = {
                 ${alertHTML}
                 <div class="card-body">
                     <div class="info-grid">
-                        <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(G.localizacao)}</span></div>
-                        <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(G.tecnico)}</span></div>
-                        <div class="info-item"><span class="info-label">Manut.:</span><span class="info-value">${fmtDate(M.ultima)}</span></div>
-                        <div class="info-item"><span class="info-label">Comun.:</span><span class="info-value">${fmtDate(G.ultimaCom)} ${fmtTime(G.ultimaCom)}</span></div>
+                        <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(t.geral.localizacao)}</span></div>
+                        <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(t.geral.tecnico)}</span></div>
+                        <div class="info-item"><span class="info-label">Última Manut.</span><span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
+                        <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDate(t.geral.ultimaCom)} ${fmtTime(t.geral.ultimaCom)}</span></div>
                         
                         <div class="divider"></div>
                         
                         <div class="info-item" style="grid-column: 1 / -1;">
                             <span class="info-label">Falha Detectada:</span> 
-                            <span class="info-value ${F.detectada ? 'text-red' : ''}">${val(F.detectada)}</span>
+                            <span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span>
                         </div>
                          <div class="info-item" style="grid-column: 1 / -1;">
                             <span class="info-label">Material Pendente:</span> 
-                            <span class="info-value ${P.material ? 'text-red' : ''}">${val(P.material)}</span>
+                            <span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span>
                         </div>
                     </div>
                     ${t.observacoes ? `<div class="obs-box">"${t.observacoes}"</div>` : ''}
@@ -311,9 +351,14 @@ const app = {
             `;
             container.appendChild(div);
         });
+
+        const totalCard = document.getElementById('total-card');
+        if(totalCard) totalCard.innerText = list.length;
     },
 
-    // --- SALVAR (APENAS ADMIN) ---
+    // =================================================================
+    // 6. SALVAR DADOS
+    // =================================================================
     async saveTower(e) {
         if(this.userRole !== 'admin') return alert("Apenas Admin pode salvar!");
         e.preventDefault();
@@ -321,6 +366,7 @@ const app = {
         
         const tower = {
             id: id,
+            _collection: this.collectionName,
             nome: document.getElementById('f-nome').value,
             status: document.getElementById('f-status').value,
             geral: {
@@ -349,26 +395,23 @@ const app = {
             updatedAt: new Date().toISOString()
         };
 
-        // Salva Local
-        await idb.put('towers', tower);
-        this.closeModal();
-        
-        // Atualiza UI
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
+        
+        await this.updateLocalBackup(this.towers);
+
+        this.closeModal();
         this.renderList();
 
-        // Envia Nuvem
         if (navigator.onLine && this.db) {
             try { await this.db.collection(this.collectionName).doc(String(id)).set(tower); }
-            catch (error) { console.error(error); }
+            catch (error) { console.error("Erro ao salvar no Firebase:", error); }
         }
     },
 
     // =================================================================
-    // 5. RELATÓRIOS E CHECKLIST
+    // 7. GERAÇÃO DE PDFS
     // =================================================================
-    
     async drawSmartLogo(doc, base64, x, y, maxW, maxH) {
         if (!base64 || base64.length < 100) return;
         return new Promise((resolve) => {
@@ -401,8 +444,9 @@ const app = {
         if(this.currentLocation === 'MSG') subTitle = "– MSG – CRIXÁS – GO"; 
         if(this.currentLocation === 'CUIABA') subTitle = "– CUIABÁ – SABARÁ – MG"; 
         if(this.currentLocation === 'QUEIROZ') subTitle = "– QUEIROZ – RAPOSOS – MG";
-        doc.text(subTitle, 105, y, null, null, "center");
+        if(this.currentLocation === 'RPX') subTitle = "– RPX – RAPOSOS – MG";
         
+        doc.text(subTitle, 105, y, null, null, "center");
         doc.setFontSize(12); doc.setFont("times", "normal");
         const hoje = new Date();
         const mes = hoje.toLocaleString('pt-BR', { month: 'long' });
@@ -486,15 +530,18 @@ const app = {
         await this.drawTowerPage(doc, t, 1, 1); doc.save(`${t.nome}.pdf`); 
     },
 
-    // --- CHECKLIST ---
+    // =================================================================
+    // 8. CHECKLIST
+    // =================================================================
     openChecklist() { 
         if(this.userRole !== 'admin') return alert("Acesso Restrito!");
         document.getElementById('checklist-screen').style.display = 'flex';
         this.renderChecklistForm(); this.setupSignaturePad();
-        document.getElementById('chk-data').valueAsDate = new Date();
-        document.getElementById('chk-hora-inicio').value = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         
-        // Define hora fim sugerida
+        const now = new Date();
+        document.getElementById('chk-data').valueAsDate = now;
+        document.getElementById('chk-hora-inicio').value = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
         const end = new Date(); end.setMinutes(end.getMinutes() + 30);
         document.getElementById('chk-hora-fim').value = end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     },
@@ -530,6 +577,7 @@ const app = {
         if(!confirm("Gerar PDF?")) return;
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
 
+        // LOGOS
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         await this.drawSmartLogo(doc, this.logoCliente, 146, 10, 50, 25);
 
@@ -547,8 +595,10 @@ const app = {
         const clima = document.getElementById('chk-clima').value;
         const veiculo = document.getElementById('chk-recurso').value;
         const exec = document.getElementById('chk-executantes').value;
+        
+        const torreSel = document.getElementById('chk-torre').value;
 
-        doc.text(`UNIDADE: ${this.currentLocation}   |   DATA: ${data}`, 16, 42);
+        doc.text(`UNIDADE: ${this.currentLocation}  |  TORRE: ${torreSel}  |  DATA: ${data}`, 16, 42);
         doc.text(`INÍCIO: ${horaIni}   |   TÉRMINO: ${horaFim}`, 16, 48);
         doc.text(`CLIMA: ${clima}   |   RECURSO: ${veiculo}`, 120, 42);
         doc.text(`EXECUTANTES: ${exec}`, 16, 54);
@@ -568,7 +618,9 @@ const app = {
         doc.save(`Checklist_${this.currentLocation}_${data}.pdf`);
     },
 
-    // --- UTILS ---
+    // =================================================================
+    // 9. UTILS
+    // =================================================================
     filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
     closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
     editTower(id) { 
@@ -576,13 +628,13 @@ const app = {
         this.tempPhotos = [...t.fotos] || [];
         document.getElementById('tower-form').reset();
         document.getElementById('image-preview-container').innerHTML = '';
-        // Preencher IDs...
+        
         document.getElementById('tower-id').value = t.id; document.getElementById('f-nome').value = t.nome; document.getElementById('f-status').value = t.status;
-        document.getElementById('f-geral-local').value = t.geral ? t.geral.localizacao : ''; document.getElementById('f-geral-prio').value = t.geral ? t.geral.prioridade : 'Média'; document.getElementById('f-geral-tec').value = t.geral ? t.geral.tecnico : ''; document.getElementById('f-geral-ultimacom').value = t.geral ? t.geral.ultimaCom : '';
-        document.getElementById('f-falhas-detectada').value = t.falhas ? t.falhas.detectada : ''; document.getElementById('f-falhas-historico').value = t.falhas ? t.falhas.historico : ''; document.getElementById('f-falhas-acao').value = t.falhas ? t.falhas.acao : '';
-        document.getElementById('f-manu-ultima').value = t.manutencao ? t.manutencao.ultima : ''; document.getElementById('f-manu-proxima').value = t.manutencao ? t.manutencao.proxima : ''; document.getElementById('f-manu-custo').value = t.manutencao ? t.manutencao.custo : ''; document.getElementById('f-manu-pecas').value = t.manutencao ? t.manutencao.pecas : '';
-        document.getElementById('f-pend-servico').value = t.pendencias ? t.pendencias.servico : ''; document.getElementById('f-pend-material').value = t.pendencias ? t.pendencias.material : '';
-        document.getElementById('f-obs').value = t.observacoes || '';
+        document.getElementById('f-geral-local').value = t.geral.localizacao; document.getElementById('f-geral-prio').value = t.geral.prioridade; document.getElementById('f-geral-tec').value = t.geral.tecnico; document.getElementById('f-geral-ultimacom').value = t.geral.ultimaCom;
+        document.getElementById('f-falhas-detectada').value = t.falhas.detectada; document.getElementById('f-falhas-historico').value = t.falhas.historico; document.getElementById('f-falhas-acao').value = t.falhas.acao;
+        document.getElementById('f-manu-ultima').value = t.manutencao.ultima; document.getElementById('f-manu-proxima').value = t.manutencao.proxima; document.getElementById('f-manu-custo').value = t.manutencao.custo; document.getElementById('f-manu-pecas').value = t.manutencao.pecas;
+        document.getElementById('f-pend-servico').value = t.pendencias.servico; document.getElementById('f-pend-material').value = t.pendencias.material;
+        document.getElementById('f-obs').value = t.observacoes;
         this.renderImagePreviews(); document.getElementById('modal').style.display = 'block';
     },
     handleImagePreview(e) { Array.from(e.target.files).forEach(file => { this.resizeImage(file, 1280, 1280, (b64) => { this.tempPhotos.push(b64); this.renderImagePreviews(); }); }); },
@@ -593,5 +645,4 @@ const app = {
     updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; }
 };
 
-window.onload = () => app.initApp();
 window.onload = () => app.initApp();
