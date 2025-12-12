@@ -1,14 +1,15 @@
-const CACHE_NAME = 'gestao-torres-v5-nativo'; // Mudei a versão para forçar atualização
+const CACHE_NAME = 'gestao-torres-v6-offline'; // Mudei versão para forçar atualização
 
-// Arquivos vitais para o visual do app
+// Arquivos OBRIGATÓRIOS para o app funcionar
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
+  './offline.html',
   './style.css',
   './app.js',
   './manifest.json',
   
-  // Bibliotecas (Firebase, PDF, IDB, Ícones)
+  // Bibliotecas
   'https://fonts.googleapis.com/icon?family=Material+Icons',
   'https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js',
   'https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js',
@@ -17,18 +18,18 @@ const ASSETS_TO_CACHE = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js'
 ];
 
-// 1. Instalação: Baixa tudo para o celular
+// 1. INSTALAÇÃO: Baixa tudo imediatamente
 self.addEventListener('install', (event) => {
+  self.skipWaiting(); // Força o SW a ativar imediatamente
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Cacheando App Completo');
+      console.log('[SW] Baixando arquivos vitais...');
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
-  self.skipWaiting();
 });
 
-// 2. Ativação: Limpa versões velhas
+// 2. ATIVAÇÃO: Limpa caches velhos
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keyList) => {
@@ -41,28 +42,28 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  self.clients.claim();
+  self.clients.claim(); // Assume controle da página imediatamente
 });
 
-// 3. Estratégia de Busca: Cache First (Prioriza o Offline)
-// Se tiver no cache (mesmo sem internet), usa o cache. Se não, tenta a rede.
+// 3. FETCH: Intercepta requisições
 self.addEventListener('fetch', (event) => {
-  // Não cacheia chamadas ao Firestore (deixa o SDK do Firebase lidar com isso)
-  if (event.request.url.includes('firestore.googleapis.com')) return;
+  // Se for requisição para API (Firestore), deixa passar direto
+  if (event.request.url.includes('firestore.googleapis.com') || event.request.method !== 'GET') {
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      // Retorna o visual salvo imediatamente (Velocidade Nativa)
+      // 1. Se tem no cache, entrega rápido (Cache First)
       if (cachedResponse) {
         return cachedResponse;
       }
-      
-      // Se não achou (ex: navegar para uma página nova), tenta a rede
+
+      // 2. Se não tem, tenta buscar na internet
       return fetch(event.request).catch(() => {
-        // Se falhar a rede, retorna o index.html (modo SPA offline)
-        // Isso garante que a estrutura sempre carregue
+        // 3. Se falhar a internet E for uma página HTML, entrega o offline.html
         if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
+          return caches.match('./offline.html');
         }
       });
     })
