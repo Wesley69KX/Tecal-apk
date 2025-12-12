@@ -6,18 +6,22 @@
     <title>Gestão de Torres - V2</title>
     
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon-192.png">
 
+    <script>
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'style.css?v=' + new Date().getTime(); // Força atualização sempre
+        document.head.appendChild(link);
+    </script>
+
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 </head>
@@ -235,12 +239,12 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
-
-    <style>
-        /* Ajuste simples para o loader girar */
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+    <script>
+        // Cria o script do APP com um número aleatório (timestamp) no final
+        var script = document.createElement('script');
+        script.src = 'app.js?v=' + new Date().getTime(); 
+        document.body.appendChild(script);
+    </script>
 
 </body>
 </html>
