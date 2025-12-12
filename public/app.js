@@ -746,4 +746,15 @@ const app = {
     updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; }
 };
 
-window.onload = () => app.initApp();
+window.onload = () => {
+    // Tenta desregistrar service workers antigos para garantir atualização em DEV
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for(let registration of registrations) {
+                registration.unregister();
+            }
+        });
+    }
+    // Inicia o App
+    app.initApp();
+};
