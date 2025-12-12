@@ -125,7 +125,7 @@ const app = {
     },
 
     // =================================================================
-    // 4. LÓGICA DE DADOS (INTEGRIDADE E FIREBASE)
+    // 4. LÓGICA DE DADOS
     // =================================================================
     async init() {
         try {
@@ -150,7 +150,6 @@ const app = {
                         data._collection = this.collectionName; 
                         cloudData.push(data);
                     });
-                    
                     this.towers = cloudData;
                     this.updateLocalBackup(cloudData);
                     this.renderList();
@@ -283,7 +282,6 @@ const app = {
                 ? `<button class="btn-card btn-edit" onclick="app.editTower(${t.id})">Editar</button>` 
                 : '';
 
-            // Layout do Card ajustado para quebrar texto longo
             div.innerHTML = `
                 <div class="card-header">
                     <strong>🔔 ${t.nome}</strong>
@@ -377,8 +375,17 @@ const app = {
     },
 
     // =================================================================
-    // 7. GERAÇÃO DE PDFS (LAYOUT ELÁSTICO)
+    // 7. GERAÇÃO DE PDFS (COM AJUSTE DE ALTURA E DUAS LOGOS)
     // =================================================================
+    
+    // Função auxiliar para desenhar textos centralizados com quebra de linha
+    drawCenteredText(doc, text, y, size = 12, style = "normal") {
+        doc.setFont("times", style); doc.setFontSize(size);
+        const lines = doc.splitTextToSize(text, 170); // 170 largura segura
+        doc.text(lines, 105, y, { align: "center" });
+        return y + (lines.length * (size/2)); // Retorna novo Y
+    },
+
     async drawSmartLogo(doc, base64, x, y, maxW, maxH) {
         if (!base64 || base64.length < 100) return;
         return new Promise((resolve) => {
@@ -400,13 +407,11 @@ const app = {
         await this.drawSmartLogo(doc, this.logoEmpresa, 75, 30, 60, 30);
         await this.drawSmartLogo(doc, this.logoCliente, 140, 30, 50, 25);
 
-        doc.setFont("times", "bold"); doc.setFontSize(18);
         let y = 90;
-        doc.text("SERVIÇOS DE MANUTENÇÃO DO", 105, y, null, null, "center"); y+=10;
-        doc.text("SISTEMA DE NOTIFICAÇÃO EM", 105, y, null, null, "center"); y+=10;
-        doc.text("MASSA", 105, y, null, null, "center"); y+=30;
-        doc.setFontSize(16);
-        doc.text("MINERAÇÃO ANGLOGOLD ASHANTI", 105, y, null, null, "center"); y+=10;
+        y = this.drawCenteredText(doc, "SERVIÇOS DE MANUTENÇÃO DO", y, 18, "bold") + 5;
+        y = this.drawCenteredText(doc, "SISTEMA DE NOTIFICAÇÃO EM MASSA", y, 18, "bold") + 20;
+        
+        y = this.drawCenteredText(doc, "MINERAÇÃO ANGLOGOLD ASHANTI", y, 16, "normal") + 10;
         
         let subTitle = "– CDS – SANTA BÁRBARA – MG"; 
         if(this.currentLocation === 'MSG') subTitle = "– MSG – CRIXÁS – GO"; 
@@ -414,11 +419,11 @@ const app = {
         if(this.currentLocation === 'QUEIROZ') subTitle = "– QUEIROZ – RAPOSOS – MG";
         if(this.currentLocation === 'RPX') subTitle = "– RPX – RAPOSOS – MG";
         
-        doc.text(subTitle, 105, y, null, null, "center");
-        doc.setFontSize(12); doc.setFont("times", "normal");
+        y = this.drawCenteredText(doc, subTitle, y, 14, "normal") + 10;
+
         const hoje = new Date();
         const mes = hoje.toLocaleString('pt-BR', { month: 'long' });
-        doc.text(`${mes.charAt(0).toUpperCase() + mes.slice(1)} de ${hoje.getFullYear()}`, 105, 260, null, null, "center");
+        this.drawCenteredText(doc, `${mes.charAt(0).toUpperCase() + mes.slice(1)} de ${hoje.getFullYear()}`, 260, 12, "normal");
 
         const lista = [...this.towers].sort((a,b) => a.id - b.id);
         for(let i=0; i<lista.length; i++) {
@@ -439,12 +444,13 @@ const app = {
         if (filtered.length === 0) return alert("Sem registros.");
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
         
+        // CAPA MENSAL
         await this.drawSmartLogo(doc, this.logoEmpresa, 65, 20, 50, 25);
         await this.drawSmartLogo(doc, this.logoCliente, 120, 20, 50, 25);
 
-        doc.setFont("times", "bold"); doc.setFontSize(18);
-        doc.text("RELATÓRIO MENSAL", 105, 80, null, null, "center");
-        doc.text(`Período: ${input} - ${this.currentLocation}`, 105, 100, null, null, "center");
+        let y = 80;
+        y = this.drawCenteredText(doc, "RELATÓRIO MENSAL", y, 18, "bold") + 15;
+        this.drawCenteredText(doc, `Período: ${input} - ${this.currentLocation}`, y, 16, "normal");
         
         for(let i=0; i<filtered.length; i++) {
             doc.addPage();
@@ -453,7 +459,7 @@ const app = {
         doc.save(`Relatorio_Mensal_${mes}_${ano}.pdf`);
     },
 
-    // --- FUNÇÃO CORRIGIDA PARA NÃO EMBOLAR TEXTO (LAYOUT ELÁSTICO) ---
+    // --- PÁGINA INDIVIDUAL COM TEXTO ELÁSTICO E DUAS LOGOS ---
     async drawTowerPage(doc, t, pageNumber, totalPages) {
         doc.setFont("times", "roman");
         
@@ -463,16 +469,15 @@ const app = {
         doc.setFontSize(10); doc.setTextColor(80);
         doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 30, null, null, "right");
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 35, null, null, "right");
-        
         doc.setDrawColor(0); doc.line(14, 38, 196, 38);
         
         let y = 50; 
         doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
         doc.text(`Detalhes: ${t.nome}`, 105, y, null, null, "center"); y += 15;
         
-        // Função auxiliar que empurra o Y para baixo dinamicamente
+        // Função inteligente que "empurra" o conteúdo para baixo
         const drawField = (label, value) => {
-            if(y > 270) { doc.addPage(); y = 30; } // Cria nova página se acabar espaço
+            if(y > 270) { doc.addPage(); y = 30; } 
             
             doc.setFont("times", "bold"); doc.setFontSize(11);
             doc.text(`${label}:`, 14, y);
@@ -481,13 +486,10 @@ const app = {
             if(label.includes('Última') || label.includes('Próxima')) { try { if(val.includes('-')) val = new Date(val).toLocaleDateString('pt-BR'); } catch(e){} }
 
             doc.setFont("times", "normal"); 
-            // Quebra o texto em linhas para não sair da folha
-            const lines = doc.splitTextToSize(val, 130);
+            const lines = doc.splitTextToSize(val, 130); // Quebra o texto
             doc.text(lines, 60, y);
             
-            // Calcula altura real do bloco de texto
-            const blockHeight = (lines.length * 5); 
-            y += Math.max(7, blockHeight + 2); // Pula o espaço necessário
+            y += Math.max(7, (lines.length * 5) + 2); // Calcula altura dinâmica
         };
 
         const drawSectionHeader = (title) => {
@@ -537,7 +539,7 @@ const app = {
     },
 
     // =================================================================
-    // 8. CHECKLIST
+    // 8. CHECKLIST (COM LOGOS E SEM SUBTITULO)
     // =================================================================
     openChecklist() { 
         if(this.userRole !== 'admin') return alert("Acesso Restrito!");
@@ -583,11 +585,11 @@ const app = {
         if(!confirm("Gerar PDF?")) return;
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
 
-        // LOGOS (ESQUERDA E DIREITA)
+        // LOGOS DUPLAS
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         await this.drawSmartLogo(doc, this.logoCliente, 146, 10, 50, 25);
 
-        // AQUI: Texto removido conforme solicitado
+        // TEXTO ABAIXO DA LOGO REMOVIDO AQUI
         
         doc.setFont("helvetica", "bold"); doc.setFontSize(10);
         doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 105, 15, null, null, "center");
@@ -617,19 +619,19 @@ const app = {
             tableBody.push([item.id, item.text, status, comment]);
         });
         
-        // Tabela Auto-Ajustável
+        // TABELA ELÁSTICA (QUEBRA DE LINHA)
         doc.autoTable({ 
             startY: 60, 
             head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], 
             body: tableBody, 
             theme: 'grid', 
             headStyles: { fillColor: [0, 86, 179], textColor: 255 }, 
-            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' }, // Permite quebra de linha
+            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' }, // IMPORTANTE: Linebreak
             columnStyles: { 
-                0: {cellWidth: 20}, // Item
-                1: {cellWidth: 80}, // Atividade
-                2: {cellWidth: 20}, // Status
-                3: {cellWidth: 'auto'} // Comentários (Usa o resto e quebra linha)
+                0: {cellWidth: 20}, 
+                1: {cellWidth: 80}, 
+                2: {cellWidth: 20}, 
+                3: {cellWidth: 'auto'} // Ocupa o resto e quebra
             },
             didParseCell: function(data) { 
                 if (data.section === 'body' && data.column.index === 2) { 
