@@ -15,7 +15,7 @@
     <script>
         var link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = 'style.css?v=' + new Date().getTime(); // Força atualização sempre
+        link.href = 'style.css?v=' + new Date().getTime(); 
         document.head.appendChild(link);
     </script>
 
@@ -27,11 +27,11 @@
 </head>
 <body>
 
-    <div id="connection-status" class="status-badge online" style="position:fixed; top:10px; right:10px; z-index:9999; padding:5px 10px; border-radius:15px; background:#28a745; color:white; font-weight:bold; font-size:12px;">Conectado</div>
+    <div id="connection-status" class="status-badge online">Conectado</div>
 
     <div id="login-screen" class="login-overlay">
         <div class="login-box">
-            <img id="login-logo-view" class="login-logo-img" alt="Logo" style="display:none; max-width:150px; margin:0 auto 20px auto;">
+            <img id="login-logo-view" class="login-logo-img" alt="Logo" style="display:none;">
             <div class="menu-header">
                 <h2>🔐 Acesso Restrito</h2>
                 <p>Identifique-se</p>
@@ -92,6 +92,7 @@
                 <button id="btn-new-checklist" class="btn-action btn-checklist" onclick="app.openChecklist()">📋 Checklist</button>
                 <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Geral</button>
                 <button class="btn-month-pdf" onclick="app.generateMonthlyPDF()">📅 Mensal</button>
+                <button class="btn-sync" onclick="app.syncNow()">🔄 Sync</button>
                 <button class="btn-exit" onclick="window.location.reload()">Sair</button>
             </div>
         </header>
@@ -108,6 +109,85 @@
             
             <div id="tower-list" class="tower-list"></div>
         </div>
+    </div>
+
+    <div id="modal" class="modal">
+        <form id="tower-form" onsubmit="app.saveTower(event)" class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title"><span class="material-icons" style="vertical-align:middle">edit</span> Editar Torre</h2>
+                <span class="close" onclick="app.closeModal()">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <input type="hidden" id="tower-id">
+                
+                <div class="form-section">
+                    <h3>Principal</h3>
+                    <label>Nome</label><input type="text" id="f-nome" class="readonly-input" readonly>
+                    <label>Status</label>
+                    <select id="f-status">
+                        <option value="Operando">Operando</option>
+                        <option value="Falha">Falha</option>
+                        <option value="Manutenção">Manutenção</option>
+                        <option value="Desativada">Desativada</option>
+                    </select>
+                </div>
+
+                <div class="form-section">
+                    <h3>Geral</h3>
+                    <label>Localização</label><input type="text" id="f-geral-local">
+                    <div class="two-col">
+                        <div><label>Prioridade</label>
+                            <select id="f-geral-prio"><option>Média</option><option>Alta</option><option>Baixa</option></select>
+                        </div>
+                        <div><label>Técnico</label><input type="text" id="f-geral-tec"></div>
+                    </div>
+                    <label>Última Com.</label><input type="datetime-local" id="f-geral-ultimacom">
+                </div>
+
+                <div class="form-section">
+                    <h3>Falhas</h3>
+                    <label>Detectada</label><input type="text" id="f-falhas-detectada">
+                    <label>Histórico</label><textarea id="f-falhas-historico" rows="3"></textarea>
+                    <label>Ação</label><textarea id="f-falhas-acao" rows="3"></textarea>
+                </div>
+
+                <div class="form-section">
+                    <h3>Manutenção</h3>
+                    <div class="two-col">
+                        <div><label>Última</label><input type="date" id="f-manu-ultima"></div>
+                        <div><label>Próxima</label><input type="date" id="f-manu-proxima"></div>
+                    </div>
+                    <label>Custo</label><input type="text" id="f-manu-custo">
+                    <label>Peças</label><input type="text" id="f-manu-pecas">
+                </div>
+
+                <div class="form-section warning-bg">
+                    <h3>Pendências</h3>
+                    <label>Serviço</label><input type="text" id="f-pend-servico">
+                    <label>Material</label><input type="text" id="f-pend-material">
+                </div>
+
+                <div class="form-section">
+                    <h3>Fotos & Obs</h3>
+                    <label>Observações</label><textarea id="f-obs" rows="4"></textarea>
+                    
+                    <div class="photo-area">
+                        <p style="margin-bottom:10px; font-weight:bold; color:#666;">
+                            <span class="material-icons" style="vertical-align:middle">add_a_photo</span> Fotos
+                        </p>
+                        <input type="file" id="image-input" multiple onchange="app.handleImagePreview(event)" style="display:none" accept="image/*">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('image-input').click()" style="width:auto">Selecionar</button>
+                        <div id="image-preview-container" class="image-preview-container"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button>
+                <button type="submit" class="btn-save">Salvar Alterações</button>
+            </div>
+        </form>
     </div>
 
     <div id="checklist-screen" class="checklist-overlay" style="display:none;">
@@ -161,86 +241,16 @@
         </div>
     </div>
 
-    <div id="modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="modal-title">Editar Torre</h2>
-                <span class="close" onclick="app.closeModal()">&times;</span>
-            </div>
-            
-            <form id="tower-form" onsubmit="app.saveTower(event)">
-                <input type="hidden" id="tower-id">
-                
-                <div class="form-section">
-                    <h3>Principal</h3>
-                    <label>Nome</label><input type="text" id="f-nome" required>
-                    <label>Status</label>
-                    <select id="f-status">
-                        <option value="Operando">Operando</option>
-                        <option value="Falha">Falha</option>
-                        <option value="Manutenção">Manutenção</option>
-                        <option value="Desativada">Desativada</option>
-                    </select>
-                </div>
-
-                <div class="form-section">
-                    <h3>Geral</h3>
-                    <label>Localização</label><input type="text" id="f-geral-local">
-                    <div class="two-col">
-                        <div><label>Prioridade</label>
-                            <select id="f-geral-prio">
-                                <option>Média</option><option>Alta</option><option>Baixa</option>
-                            </select>
-                        </div>
-                        <div><label>Técnico</label><input type="text" id="f-geral-tec"></div>
-                    </div>
-                    <label>Última Com.</label><input type="datetime-local" id="f-geral-ultimacom">
-                </div>
-
-                <div class="form-section">
-                    <h3>Falhas</h3>
-                    <label>Detectada</label><input type="text" id="f-falhas-detectada">
-                    <label>Histórico</label><textarea id="f-falhas-historico"></textarea>
-                    <label>Ação</label><input type="text" id="f-falhas-acao">
-                </div>
-
-                <div class="form-section">
-                    <h3>Manutenção</h3>
-                    <div class="two-col">
-                        <div><label>Última</label><input type="date" id="f-manu-ultima"></div>
-                        <div><label>Próxima</label><input type="date" id="f-manu-proxima"></div>
-                    </div>
-                    <label>Custo</label><input type="text" id="f-manu-custo">
-                    <label>Peças</label><input type="text" id="f-manu-pecas">
-                </div>
-
-                <div class="form-section warning-bg">
-                    <h3>Pendências</h3>
-                    <label>Serviço</label><input type="text" id="f-pend-servico">
-                    <label>Material</label><input type="text" id="f-pend-material">
-                </div>
-
-                <div class="form-section">
-                    <h3>Fotos & Obs</h3>
-                    <label>Observações</label><textarea id="f-obs"></textarea>
-                    
-                    <div class="photo-area" style="border:1px dashed #ccc; padding:15px; text-align:center; margin-top:10px;">
-                        <input type="file" id="image-input" multiple onchange="app.handleImagePreview(event)" style="display:none">
-                        <button type="button" onclick="document.getElementById('image-input').click()" style="padding:5px 10px;">+ Fotos</button>
-                        <div id="image-preview-container" class="image-preview-container" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:10px; justify-content:center;"></div>
-                    </div>
-                </div>
-
-                <div class="modal-actions sticky-footer">
-                    <button type="button" class="btn-cancel" onclick="app.closeModal()">Cancelar</button>
-                    <button type="submit" class="btn-save">Salvar</button>
-                </div>
-            </form>
+    <div id="sync-screen" class="sync-overlay">
+        <div class="sync-content">
+            <span id="sync-spinner" class="material-icons sync-spinner">autorenew</span>
+            <span id="sync-icon-ok" class="material-icons sync-success-icon">check_circle</span>
+            <h3 id="sync-title">Sincronizando...</h3>
+            <p id="sync-msg" style="color:#666;">Enviando dados para a nuvem.</p>
         </div>
     </div>
 
     <script>
-        // Cria o script do APP com um número aleatório (timestamp) no final
         var script = document.createElement('script');
         script.src = 'app.js?v=' + new Date().getTime(); 
         document.body.appendChild(script);
