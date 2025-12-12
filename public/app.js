@@ -125,7 +125,7 @@ const app = {
     },
 
     // =================================================================
-    // 4. LÓGICA DE DADOS
+    // 4. LÓGICA DE DADOS (COM PROTEÇÃO CONTRA SOBRESCRITA)
     // =================================================================
     async init() {
         try {
@@ -139,25 +139,57 @@ const app = {
                 },
             });
 
-            this.db.collection(this.collectionName).onSnapshot((snapshot) => {
+            // Listener Tempo Real com Lógica de Fusão Inteligente
+            this.db.collection(this.collectionName).onSnapshot(async (snapshot) => {
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 
                 if (!snapshot.empty) {
-                    const cloudData = [];
+                    const serverData = [];
                     snapshot.forEach(doc => {
                         let data = doc.data();
                         data._collection = this.collectionName; 
-                        cloudData.push(data);
+                        serverData.push(data);
                     });
-                    this.towers = cloudData;
-                    this.updateLocalBackup(cloudData);
+
+                    // Busca dados locais para comparar
+                    const allLocal = await this.dbLocal.getAll('towers');
+                    const myLocalData = allLocal.filter(t => t._collection === this.collectionName);
+
+                    // LÓGICA DE FUSÃO:
+                    // Se o dado Local for mais NOVO que o Servidor -> Mantém Local e Agenda Sync
+                    // Se o dado Servidor for mais NOVO que o Local -> Atualiza Local
+                    
+                    const mergedData = serverData.map(serverItem => {
+                        const localItem = myLocalData.find(l => l.id === serverItem.id);
+                        
+                        // Verifica timestamps
+                        const serverTime = new Date(serverItem.updatedAt || 0).getTime();
+                        const localTime = localItem ? new Date(localItem.updatedAt || 0).getTime() : 0;
+
+                        if (localItem && localTime > serverTime) {
+                            console.log(`[Sync] Torre ${localItem.id}: Local é mais recente. Mantendo Local.`);
+                            return localItem; // Mantém a versão local (que você editou offline)
+                        } else {
+                            return serverItem; // Aceita a versão do servidor
+                        }
+                    });
+                    
+                    this.towers = mergedData;
+                    await this.updateLocalBackup(mergedData);
                     this.renderList();
+
+                    // Se tivermos dados locais mais novos, empurra pro servidor agora
+                    if (this.hasPendingSync(myLocalData, serverData) && navigator.onLine) {
+                        console.log("[Sync] Detectado dados pendentes. Enviando para nuvem...");
+                        this.syncNow(true); // true = silencioso
+                    }
+
                 } else {
                     this.checkDataIntegrity();
                 }
             }, (error) => {
-                console.log("Modo Offline.");
+                console.log("Modo Offline ativo.");
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 this.loadFromLocal();
@@ -169,9 +201,29 @@ const app = {
         }
 
         this.updateOnlineStatus();
-        window.addEventListener('online', () => this.updateOnlineStatus());
+        
+        // Quando a internet voltar, tenta sincronizar o que foi feito offline
+        window.addEventListener('online', () => {
+            this.updateOnlineStatus();
+            if(this.userRole === 'admin') {
+                console.log("[Online] Tentando sincronizar pendências...");
+                this.syncNow(true);
+            }
+        });
+        
         window.addEventListener('offline', () => this.updateOnlineStatus());
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
+    },
+
+    // Verifica se existe algo local mais novo que no servidor
+    hasPendingSync(localList, serverList) {
+        return localList.some(localItem => {
+            const serverItem = serverList.find(s => s.id === localItem.id);
+            if (!serverItem) return true; // Novo item criado offline
+            const localTime = new Date(localItem.updatedAt || 0).getTime();
+            const serverTime = new Date(serverItem.updatedAt || 0).getTime();
+            return localTime > serverTime;
+        });
     },
 
     async checkDataIntegrity() {
@@ -180,6 +232,7 @@ const app = {
 
         if (currentLocData.length > 0) {
             this.towers = currentLocData;
+            // Se abriu e estava vazio no server, mas cheio no local -> Sobe tudo
             if(navigator.onLine && this.userRole === 'admin') this.syncNow();
         } else {
             await this.seedDatabase(); 
@@ -357,28 +410,28 @@ const app = {
             },
             observacoes: document.getElementById('f-obs').value,
             fotos: this.tempPhotos,
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString() // DATA MAIS RECENTE = GANHA A SINCRONIZAÇÃO
         };
 
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
         
+        // 1. Salva no Local (IDB) Imediatamente
         await this.updateLocalBackup(this.towers);
 
         this.closeModal();
         this.renderList();
 
+        // 2. Tenta salvar no Firebase se tiver internet
         if (navigator.onLine && this.db) {
             try { await this.db.collection(this.collectionName).doc(String(id)).set(tower); }
-            catch (error) { console.error(error); }
+            catch (error) { console.error("Erro ao salvar no Firebase (será sincronizado depois):", error); }
         }
     },
 
     // =================================================================
-    // 7. GERAÇÃO DE PDFS (LAYOUT ELÁSTICO)
+    // 7. GERAÇÃO DE PDFS
     // =================================================================
-    
-    // Função auxiliar para desenhar textos centralizados com quebra de linha
     drawCenteredText(doc, text, y, size = 12, style = "normal") {
         doc.setFont("times", style); doc.setFontSize(size);
         const lines = doc.splitTextToSize(text, 170);
@@ -537,7 +590,7 @@ const app = {
     },
 
     // =================================================================
-    // 8. CHECKLIST (COM CABEÇALHO DINÂMICO E QUEBRA DE LINHA)
+    // 8. CHECKLIST
     // =================================================================
     openChecklist() { 
         if(this.userRole !== 'admin') return alert("Acesso Restrito!");
@@ -587,17 +640,13 @@ const app = {
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         await this.drawSmartLogo(doc, this.logoCliente, 146, 10, 50, 25);
 
-        // TÍTULO
+        // CABEÇALHO
         doc.setFont("helvetica", "bold"); doc.setFontSize(10);
         doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 105, 15, null, null, "center");
         doc.text("SISTEMA DE NOTIFICAÇÃO EM MASSA", 105, 20, null, null, "center");
 
-        // FUNDO CINZA DO CABEÇALHO (DINÂMICO)
-        // Como o cabeçalho agora cresce, desenhamos o retângulo depois de calcular a altura? 
-        // Não, desenhamos um fundo básico e deixamos o texto fluir.
-        doc.setDrawColor(0); doc.setFillColor(240, 240, 240); 
-        
-        doc.setFontSize(9); doc.setFont("helvetica", "bold");
+        doc.setDrawColor(0); doc.setFillColor(240, 240, 240); doc.rect(14, 35, 182, 20);
+        doc.setFontSize(9); doc.setFont("helvetica", "normal");
         
         const data = document.getElementById('chk-data').value;
         const horaIni = document.getElementById('chk-hora-inicio').value;
@@ -605,47 +654,25 @@ const app = {
         const clima = document.getElementById('chk-clima').value;
         const veiculo = document.getElementById('chk-recurso').value;
         const exec = document.getElementById('chk-executantes').value;
+        
         const torreSel = document.getElementById('chk-torre').value;
 
-        // --- LÓGICA DE CABEÇALHO DINÂMICO (CORRIGIDO PARA QUEBRA DE LINHA) ---
-        let y = 45; 
-        const margin = 14;
-        const maxWidth = 180; 
-
-        // Linha 1: Unidade e Data
-        doc.text(`UNIDADE: ${this.currentLocation}`, margin, y);
-        doc.text(`DATA: ${data}`, 120, y);
-        y += 6;
-
-        // Linha 2: Início e Fim
-        doc.text(`INÍCIO: ${horaIni}`, margin, y);
-        doc.text(`TÉRMINO: ${horaFim}`, 60, y);
-        y += 6;
-
-        // Linha 3: Torre
-        doc.text(`TORRE: ${torreSel}`, margin, y);
-        y += 6;
-
-        // Linha 4: Clima
-        doc.text(`CLIMA: ${clima}`, margin, y);
-        y += 6;
-
-        // Linha 5: Recurso (Veículo) - COM QUEBRA DE LINHA
-        const recursoLabel = "RECURSO: ";
-        const recursoValue = veiculo || "---";
-        const recursoLines = doc.splitTextToSize(recursoLabel + recursoValue, maxWidth);
-        doc.text(recursoLines, margin, y);
-        y += (recursoLines.length * 5); // Aumenta Y conforme o tamanho do texto
-
-        // Linha 6: Executantes - COM QUEBRA DE LINHA
-        const execLabel = "EXECUTANTES: ";
-        const execValue = exec || "---";
-        const execLines = doc.splitTextToSize(execLabel + execValue, maxWidth);
-        doc.text(execLines, margin, y);
-        y += (execLines.length * 5) + 5; // Espaço extra antes da tabela
-
-        // Desenha o retângulo de fundo baseado na altura calculada
-        // doc.rect(14, 35, 182, y - 35); (Opcional, se quiser borda no cabeçalho inteiro)
+        // CABEÇALHO ELÁSTICO
+        let y = 45; const margin = 16;
+        
+        doc.text(`UNIDADE: ${this.currentLocation}  |  TORRE: ${torreSel}  |  DATA: ${data}`, margin, y);
+        doc.text(`INÍCIO: ${horaIni}   |   TÉRMINO: ${horaFim}`, margin, y+6);
+        doc.text(`CLIMA: ${clima}`, 120, y+6);
+        
+        // Recurso com quebra de linha
+        const recursoTxt = `RECURSO: ${veiculo}`;
+        const recLines = doc.splitTextToSize(recursoTxt, 180);
+        doc.text(recLines, margin, y+12);
+        
+        // Executantes com quebra de linha
+        const execTxt = `EXECUTANTES: ${exec}`;
+        const execLines = doc.splitTextToSize(execTxt, 180);
+        doc.text(execLines, margin, y+12 + (recLines.length*5));
 
         const tableBody = [];
         this.checklistItemsData.forEach(item => {
@@ -654,9 +681,9 @@ const app = {
             tableBody.push([item.id, item.text, status, comment]);
         });
         
-        // TABELA ELÁSTICA
+        // TABELA
         doc.autoTable({ 
-            startY: y, 
+            startY: y+20 + (recLines.length*5) + (execLines.length*5), 
             head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], 
             body: tableBody, 
             theme: 'grid', 
@@ -684,7 +711,7 @@ const app = {
     },
 
     // =================================================================
-    // 9. UTILS
+    // 9. UTILS (SINCRONIZAÇÃO INTELIGENTE)
     // =================================================================
     filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
     closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
@@ -706,7 +733,16 @@ const app = {
     resizeImage(file, w, h, cb) { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',0.8)); }; }; },
     renderImagePreviews() { const c = document.getElementById('image-preview-container'); c.innerHTML = ''; this.tempPhotos.forEach((src, i) => { const d = document.createElement('div'); d.className='photo-wrapper'; d.innerHTML = `<img src="${src}" class="img-preview" onclick="window.open('${src}')"><div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>`; c.appendChild(d); }); },
     removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
-    syncNow() { if(navigator.onLine && this.db && this.userRole === 'admin') { this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t)); alert("Sincronizando..."); } else { alert("Sem internet ou permissão."); } },
+    
+    // SYNC MANUAL OU AUTOMÁTICO
+    syncNow(silent = false) { 
+        if(navigator.onLine && this.db && this.userRole === 'admin') { 
+            this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t)); 
+            if(!silent) alert("Sincronizando com a Nuvem..."); 
+        } else { 
+            if(!silent) alert("Sem internet ou permissão."); 
+        } 
+    },
     updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; }
 };
 
