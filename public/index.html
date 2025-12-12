@@ -6,18 +6,15 @@
     <title>Gestão de Torres - V2</title>
     
     <link rel="manifest" href="manifest.json">
+    
+    <link rel="stylesheet" href="style.css">
+    
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0056b3">
     <link rel="apple-touch-icon" href="icon-192.png">
-
-    <script>
-        var link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'style.css?v=' + new Date().getTime(); 
-        document.head.appendChild(link);
-    </script>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
@@ -27,11 +24,11 @@
 </head>
 <body>
 
-    <div id="connection-status" class="status-badge online">Conectado</div>
+    <div id="connection-status" class="status-badge online" style="position:fixed; top:10px; right:10px; z-index:9999; padding:5px 10px; border-radius:15px; background:#28a745; color:white; font-weight:bold; font-size:12px;">Conectado</div>
 
     <div id="login-screen" class="login-overlay">
         <div class="login-box">
-            <img id="login-logo-view" class="login-logo-img" alt="Logo" style="display:none;">
+            <img id="login-logo-view" class="login-logo-img" alt="Logo" style="display:none; max-width:150px; margin:0 auto 20px auto;">
             <div class="menu-header">
                 <h2>🔐 Acesso Restrito</h2>
                 <p>Identifique-se</p>
@@ -92,7 +89,6 @@
                 <button id="btn-new-checklist" class="btn-action btn-checklist" onclick="app.openChecklist()">📋 Checklist</button>
                 <button class="btn-global-pdf" onclick="app.generateGlobalPDF()">📄 Geral</button>
                 <button class="btn-month-pdf" onclick="app.generateMonthlyPDF()">📅 Mensal</button>
-                <button class="btn-sync" onclick="app.syncNow()">🔄 Sync</button>
                 <button class="btn-exit" onclick="window.location.reload()">Sair</button>
             </div>
         </header>
@@ -250,11 +246,7 @@
         </div>
     </div>
 
-    <script>
-        var script = document.createElement('script');
-        script.src = 'app.js?v=' + new Date().getTime(); 
-        document.body.appendChild(script);
-    </script>
+    <script src="app.js"></script>
 
 </body>
 </html>
