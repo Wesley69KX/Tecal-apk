@@ -125,14 +125,24 @@ const app = {
     },
 
     // =================================================================
-    // 4. LÓGICA DE DADOS BLINDADA
+    // 4. LÓGICA DE DADOS BLINDADA E SEGURA
     // =================================================================
     async init() {
+        // --- TIMEOUT DE SEGURANÇA ---
+        // Se a internet estiver ruim e o Firebase não responder em 3s,
+        // força o desaparecimento do "Carregando..."
+        setTimeout(() => {
+            const loading = document.getElementById('loading-msg');
+            if(loading && loading.style.display !== 'none') {
+                console.log("Timeout de rede: Forçando exibição offline.");
+                loading.style.display = 'none';
+            }
+        }, 3000);
+
         try {
             if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
             this.db = firebase.firestore();
             
-            // Abre o banco local
             this.dbLocal = await idb.openDB('gestao-torres-db', 1, {
                 upgrade(db) {
                     if (!db.objectStoreNames.contains('towers')) {
@@ -141,11 +151,12 @@ const app = {
                 },
             });
 
-            // 1. CARREGA DADOS LOCAIS PRIMEIRO (Para não ficar tela branca)
+            // 1. CARREGA DADOS LOCAIS IMEDIATAMENTE (Prioridade UX)
             await this.loadFromLocal();
 
-            // 2. Conecta no Firebase
+            // 2. Tenta conectar ao Firebase
             this.db.collection(this.collectionName).onSnapshot(async (snapshot) => {
+                // Esconde msg de carregamento assim que o servidor responde
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 
@@ -158,7 +169,7 @@ const app = {
                     });
                 }
 
-                // 3. FUSÃO INTELIGENTE (Prioridade para o Local se estiver 'pending')
+                // 3. FUSÃO INTELIGENTE
                 await this.mergeData(serverData);
 
             }, (error) => {
@@ -169,22 +180,22 @@ const app = {
 
         } catch (e) {
             console.error("Erro init:", e);
-            // Em caso de erro grave, garante que o local carregue
+            // Em caso de erro fatal, garante que o local carregue e o loader suma
             this.loadFromLocal();
+            const loading = document.getElementById('loading-msg');
+            if(loading) loading.style.display = 'none';
         }
 
         this.setupConnectivityListeners();
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
     },
 
-    // FUNÇÃO CERÉBRO: Decide quem ganha (Local vs Servidor)
     async mergeData(serverData) {
-        // Pega o que temos no celular agora
         const allLocal = await this.dbLocal.getAll('towers');
         const myLocalData = allLocal.filter(t => t._collection === this.collectionName);
 
+        // Se ambos vazios, cria do zero
         if (serverData.length === 0 && myLocalData.length === 0) {
-            // Se ambos vazios, cria do zero
             this.checkDataIntegrity();
             return;
         }
@@ -192,24 +203,31 @@ const app = {
         const mergedTowers = [];
         const idsProcessed = new Set();
 
-        // Itera sobre dados locais (Nossa prioridade se estiver pendente)
+        // Compara Local vs Servidor
         for (const localItem of myLocalData) {
             idsProcessed.add(localItem.id);
             const serverItem = serverData.find(s => s.id === localItem.id);
 
+            // Se o local está pendente, ele GANHA do servidor
             if (localItem._syncStatus === 'pending') {
-                console.log(`[Sync] Torre ${localItem.id} tem alterações locais pendentes. Ignorando servidor.`);
-                mergedTowers.push(localItem); // Mantém o local
+                console.log(`[Sync] Torre ${localItem.id} pendente. Mantendo Local.`);
+                mergedTowers.push(localItem); 
             } else if (serverItem) {
-                // Se não está pendente, aceita o do servidor se for mais novo ou igual
-                mergedTowers.push(serverItem);
+                // Se não está pendente, aceita o do servidor (mas verifica data por segurança)
+                const serverTime = new Date(serverItem.updatedAt || 0).getTime();
+                const localTime = new Date(localItem.updatedAt || 0).getTime();
+                
+                if (localTime > serverTime + 1000) { // Margem de 1s
+                     mergedTowers.push(localItem); // Local vence se for muito mais novo
+                } else {
+                     mergedTowers.push(serverItem); // Servidor vence
+                }
             } else {
-                // Existe no local mas não no server (e não está pendente)? Estranho, mas mantém.
                 mergedTowers.push(localItem);
             }
         }
 
-        // Adiciona itens que só existem no servidor (novas torres criadas por outros)
+        // Adiciona itens novos que só existem no servidor
         for (const serverItem of serverData) {
             if (!idsProcessed.has(serverItem.id)) {
                 mergedTowers.push(serverItem);
@@ -217,10 +235,10 @@ const app = {
         }
 
         this.towers = mergedTowers;
-        await this.updateLocalBackup(this.towers); // Salva a fusão no IDB
+        await this.updateLocalBackup(this.towers); 
         this.renderList();
 
-        // Se tem pendências, tenta subir agora
+        // Tenta subir pendências
         if (navigator.onLine) this.syncNow(true);
     },
 
@@ -233,17 +251,19 @@ const app = {
             this.towers = myData;
             this.renderList();
         }
+        // Garante que o loader suma mesmo se carregar do local
         document.getElementById('loading-msg').style.display = 'none';
     },
 
     async checkDataIntegrity() {
-        // Só roda se realmente não tiver nada em lugar nenhum
         const allData = await this.dbLocal.getAll('towers');
         const currentLocData = allData.filter(t => t._collection === this.collectionName);
 
         if (currentLocData.length === 0) {
             await this.seedDatabase(); 
         }
+        // Garante que o loader suma
+        document.getElementById('loading-msg').style.display = 'none';
     },
 
     async updateLocalBackup(data) {
@@ -277,7 +297,7 @@ const app = {
             const tower = {
                 id: i,
                 _collection: this.collectionName,
-                _syncStatus: 'synced', // Nasce sincronizado
+                _syncStatus: 'synced', 
                 nome: `ER ${idStr}`,
                 status: "Operando",
                 geral: { localizacao: "", prioridade: "Média", tecnico: "", ultimaCom: "" },
@@ -303,7 +323,7 @@ const app = {
     },
 
     // =================================================================
-    // 5. SALVAR DADOS (COM FLAG DE PENDENTE)
+    // 5. SALVAR DADOS
     // =================================================================
     async saveTower(e) {
         if(this.userRole !== 'admin') return alert("Apenas Admin pode salvar!");
@@ -313,7 +333,7 @@ const app = {
         const tower = {
             id: id,
             _collection: this.collectionName,
-            _syncStatus: 'pending', // <--- MARCA COMO PENDENTE IMEDIATAMENTE
+            _syncStatus: 'pending', // Marca pendente
             nome: document.getElementById('f-nome').value,
             status: document.getElementById('f-status').value,
             geral: {
@@ -342,37 +362,30 @@ const app = {
             updatedAt: new Date().toISOString()
         };
 
-        // 1. Atualiza memória e UI
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
         this.renderList();
         
-        // 2. Salva no Local (IDB) como PENDENTE
-        // Isso garante que se o app recarregar agora, ele sabe que esse dado é o mestre
         await this.updateLocalBackup(this.towers);
         this.closeModal();
 
-        // 3. Tenta enviar para nuvem
         this.syncSingleTower(tower);
     },
 
-    // Tenta enviar uma torre específica
     async syncSingleTower(tower) {
         if (navigator.onLine && this.db) {
             try {
-                // Tenta gravar no Firebase
                 const dataToSend = {...tower};
-                delete dataToSend._syncStatus; // Não precisamos mandar essa flag pro servidor
+                delete dataToSend._syncStatus; 
 
                 await this.db.collection(this.collectionName).doc(String(tower.id)).set(dataToSend);
                 
-                // SUCESSO: Marca como sincronizado no local
                 tower._syncStatus = 'synced';
                 const index = this.towers.findIndex(t => t.id === tower.id);
                 if(index !== -1) this.towers[index] = tower;
                 await this.updateLocalBackup(this.towers);
                 console.log("Sincronizado com sucesso:", tower.nome);
-                this.renderList(); // Atualiza para remover ícone de pendente se tiver
+                this.renderList();
 
             } catch (error) { 
                 console.error("Erro ao salvar na nuvem (ficará pendente):", error); 
@@ -382,7 +395,6 @@ const app = {
         }
     },
 
-    // Sincroniza tudo que está pendente (Chamado ao conectar)
     async syncNow(silent = false) { 
         if(!navigator.onLine || !this.db || this.userRole !== 'admin') return;
 
@@ -405,7 +417,7 @@ const app = {
             if (navigator.onLine) {
                 el.innerText = "Online";
                 el.className = "status-badge online";
-                if(this.userRole === 'admin') this.syncNow(true); // Auto-sync ao voltar
+                if(this.userRole === 'admin') this.syncNow(true); 
             } else {
                 el.innerText = "Offline";
                 el.className = "status-badge offline";
@@ -422,7 +434,12 @@ const app = {
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
         container.innerHTML = '';
-        if(!list || list.length === 0) return;
+        
+        // CORREÇÃO: Se lista vazia, avisa e para
+        if(!list || list.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:20px; width:100%; color:#666;">Nenhuma torre encontrada para esta unidade.</div>';
+            return;
+        }
 
         list.sort((a, b) => a.id - b.id);
 
@@ -430,9 +447,8 @@ const app = {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
             
-            // Indicador visual de que está pendente de envio
             const syncIcon = t._syncStatus === 'pending' 
-                ? `<span style="color:orange; font-size:12px; float:right;">🟠 Pendente Envio</span>` 
+                ? `<span style="color:orange; font-size:12px; float:right; margin-left:5px;">🟠 Pendente</span>` 
                 : '';
 
             const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
@@ -490,7 +506,7 @@ const app = {
     },
 
     // =================================================================
-    // 7. GERAÇÃO DE PDFS (COM LAYOUT ELÁSTICO)
+    // 7. GERAÇÃO DE PDFS (COM LAYOUT ELÁSTICO E DUAS LOGOS)
     // =================================================================
     drawCenteredText(doc, text, y, size = 12, style = "normal") {
         doc.setFont("times", style); doc.setFontSize(size);
@@ -523,7 +539,6 @@ const app = {
         let y = 90;
         y = this.drawCenteredText(doc, "SERVIÇOS DE MANUTENÇÃO DO", y, 18, "bold") + 5;
         y = this.drawCenteredText(doc, "SISTEMA DE NOTIFICAÇÃO EM MASSA", y, 18, "bold") + 20;
-        
         y = this.drawCenteredText(doc, "MINERAÇÃO ANGLOGOLD ASHANTI", y, 16, "normal") + 10;
         
         let subTitle = "– CDS – SANTA BÁRBARA – MG"; 
@@ -611,13 +626,10 @@ const app = {
 
         drawSectionHeader("Geral");
         Object.entries(t.geral).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
-        
         drawSectionHeader("Falhas");
         Object.entries(t.falhas).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
-
         drawSectionHeader("Manutenção");
         Object.entries(t.manutencao).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
-
         drawSectionHeader("Pendências");
         Object.entries(t.pendencias).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
         
@@ -649,7 +661,7 @@ const app = {
     },
 
     // =================================================================
-    // 8. CHECKLIST (COM LOGOS E SEM SUBTITULO)
+    // 8. CHECKLIST (COM CABEÇALHO DINÂMICO E QUEBRA DE LINHA)
     // =================================================================
     openChecklist() { 
         if(this.userRole !== 'admin') return alert("Acesso Restrito!");
@@ -695,7 +707,7 @@ const app = {
         if(!confirm("Gerar PDF?")) return;
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
 
-        // LOGOS DUPLAS
+        // LOGOS
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         await this.drawSmartLogo(doc, this.logoCliente, 146, 10, 50, 25);
 
@@ -714,22 +726,38 @@ const app = {
         const exec = document.getElementById('chk-executantes').value;
         const torreSel = document.getElementById('chk-torre').value;
 
-        // CABEÇALHO ELÁSTICO
-        let y = 45; const margin = 16;
-        
-        doc.text(`UNIDADE: ${this.currentLocation}  |  TORRE: ${torreSel}  |  DATA: ${data}`, margin, y);
-        doc.text(`INÍCIO: ${horaIni}   |   TÉRMINO: ${horaFim}`, margin, y+6);
-        doc.text(`CLIMA: ${clima}`, 120, y+6);
-        
-        // Recurso com quebra de linha
-        const recursoTxt = `RECURSO: ${veiculo}`;
-        const recLines = doc.splitTextToSize(recursoTxt, 180);
-        doc.text(recLines, margin, y+12);
-        
-        // Executantes com quebra de linha
-        const execTxt = `EXECUTANTES: ${exec}`;
-        const execLines = doc.splitTextToSize(execTxt, 180);
-        doc.text(execLines, margin, y+12 + (recLines.length*5));
+        // --- CABEÇALHO ELÁSTICO (SOLUÇÃO DE SOBREPOSIÇÃO) ---
+        let y = 45; 
+        const margin = 16;
+        const maxWidth = 180; 
+
+        doc.text(`UNIDADE: ${this.currentLocation}`, margin, y);
+        doc.text(`DATA: ${data}`, 120, y);
+        y += 6;
+
+        doc.text(`INÍCIO: ${horaIni}`, margin, y);
+        doc.text(`TÉRMINO: ${horaFim}`, 60, y);
+        y += 6;
+
+        doc.text(`TORRE: ${torreSel}`, margin, y);
+        y += 6;
+
+        doc.text(`CLIMA: ${clima}`, margin, y);
+        y += 6;
+
+        // Recurso com quebra de linha automática
+        const recursoLabel = "RECURSO: ";
+        const recursoValue = veiculo || "---";
+        const recursoLines = doc.splitTextToSize(recursoLabel + recursoValue, maxWidth);
+        doc.text(recursoLines, margin, y);
+        y += (recursoLines.length * 5); 
+
+        // Executantes com quebra de linha automática
+        const execLabel = "EXECUTANTES: ";
+        const execValue = exec || "---";
+        const execLines = doc.splitTextToSize(execLabel + execValue, maxWidth);
+        doc.text(execLines, margin, y);
+        y += (execLines.length * 5) + 5; 
 
         const tableBody = [];
         this.checklistItemsData.forEach(item => {
@@ -738,9 +766,8 @@ const app = {
             tableBody.push([item.id, item.text, status, comment]);
         });
         
-        // TABELA ELÁSTICA
         doc.autoTable({ 
-            startY: y+20 + (recLines.length*5) + (execLines.length*5), 
+            startY: y, 
             head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], 
             body: tableBody, 
             theme: 'grid', 
