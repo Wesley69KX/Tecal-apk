@@ -375,15 +375,15 @@ const app = {
     },
 
     // =================================================================
-    // 7. GERAÇÃO DE PDFS (COM AJUSTE DE ALTURA E DUAS LOGOS)
+    // 7. GERAÇÃO DE PDFS (LAYOUT ELÁSTICO)
     // =================================================================
     
     // Função auxiliar para desenhar textos centralizados com quebra de linha
     drawCenteredText(doc, text, y, size = 12, style = "normal") {
         doc.setFont("times", style); doc.setFontSize(size);
-        const lines = doc.splitTextToSize(text, 170); // 170 largura segura
+        const lines = doc.splitTextToSize(text, 170);
         doc.text(lines, 105, y, { align: "center" });
-        return y + (lines.length * (size/2)); // Retorna novo Y
+        return y + (lines.length * (size/2)); 
     },
 
     async drawSmartLogo(doc, base64, x, y, maxW, maxH) {
@@ -444,7 +444,6 @@ const app = {
         if (filtered.length === 0) return alert("Sem registros.");
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
         
-        // CAPA MENSAL
         await this.drawSmartLogo(doc, this.logoEmpresa, 65, 20, 50, 25);
         await this.drawSmartLogo(doc, this.logoCliente, 120, 20, 50, 25);
 
@@ -459,7 +458,6 @@ const app = {
         doc.save(`Relatorio_Mensal_${mes}_${ano}.pdf`);
     },
 
-    // --- PÁGINA INDIVIDUAL COM TEXTO ELÁSTICO E DUAS LOGOS ---
     async drawTowerPage(doc, t, pageNumber, totalPages) {
         doc.setFont("times", "roman");
         
@@ -469,13 +467,13 @@ const app = {
         doc.setFontSize(10); doc.setTextColor(80);
         doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 30, null, null, "right");
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 35, null, null, "right");
+        
         doc.setDrawColor(0); doc.line(14, 38, 196, 38);
         
         let y = 50; 
         doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
         doc.text(`Detalhes: ${t.nome}`, 105, y, null, null, "center"); y += 15;
         
-        // Função inteligente que "empurra" o conteúdo para baixo
         const drawField = (label, value) => {
             if(y > 270) { doc.addPage(); y = 30; } 
             
@@ -486,10 +484,10 @@ const app = {
             if(label.includes('Última') || label.includes('Próxima')) { try { if(val.includes('-')) val = new Date(val).toLocaleDateString('pt-BR'); } catch(e){} }
 
             doc.setFont("times", "normal"); 
-            const lines = doc.splitTextToSize(val, 130); // Quebra o texto
+            const lines = doc.splitTextToSize(val, 130);
             doc.text(lines, 60, y);
             
-            y += Math.max(7, (lines.length * 5) + 2); // Calcula altura dinâmica
+            y += Math.max(7, (lines.length * 5) + 2); 
         };
 
         const drawSectionHeader = (title) => {
@@ -539,7 +537,7 @@ const app = {
     },
 
     // =================================================================
-    // 8. CHECKLIST (COM LOGOS E SEM SUBTITULO)
+    // 8. CHECKLIST (COM CABEÇALHO DINÂMICO E QUEBRA DE LINHA)
     // =================================================================
     openChecklist() { 
         if(this.userRole !== 'admin') return alert("Acesso Restrito!");
@@ -589,14 +587,17 @@ const app = {
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         await this.drawSmartLogo(doc, this.logoCliente, 146, 10, 50, 25);
 
-        // TEXTO ABAIXO DA LOGO REMOVIDO AQUI
-        
+        // TÍTULO
         doc.setFont("helvetica", "bold"); doc.setFontSize(10);
         doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 105, 15, null, null, "center");
         doc.text("SISTEMA DE NOTIFICAÇÃO EM MASSA", 105, 20, null, null, "center");
 
-        doc.setDrawColor(0); doc.setFillColor(240, 240, 240); doc.rect(14, 35, 182, 20);
-        doc.setFontSize(9); doc.setFont("helvetica", "normal");
+        // FUNDO CINZA DO CABEÇALHO (DINÂMICO)
+        // Como o cabeçalho agora cresce, desenhamos o retângulo depois de calcular a altura? 
+        // Não, desenhamos um fundo básico e deixamos o texto fluir.
+        doc.setDrawColor(0); doc.setFillColor(240, 240, 240); 
+        
+        doc.setFontSize(9); doc.setFont("helvetica", "bold");
         
         const data = document.getElementById('chk-data').value;
         const horaIni = document.getElementById('chk-hora-inicio').value;
@@ -604,13 +605,47 @@ const app = {
         const clima = document.getElementById('chk-clima').value;
         const veiculo = document.getElementById('chk-recurso').value;
         const exec = document.getElementById('chk-executantes').value;
-        
         const torreSel = document.getElementById('chk-torre').value;
 
-        doc.text(`UNIDADE: ${this.currentLocation}  |  TORRE: ${torreSel}  |  DATA: ${data}`, 16, 42);
-        doc.text(`INÍCIO: ${horaIni}   |   TÉRMINO: ${horaFim}`, 16, 48);
-        doc.text(`CLIMA: ${clima}   |   RECURSO: ${veiculo}`, 120, 42);
-        doc.text(`EXECUTANTES: ${exec}`, 16, 54);
+        // --- LÓGICA DE CABEÇALHO DINÂMICO (CORRIGIDO PARA QUEBRA DE LINHA) ---
+        let y = 45; 
+        const margin = 14;
+        const maxWidth = 180; 
+
+        // Linha 1: Unidade e Data
+        doc.text(`UNIDADE: ${this.currentLocation}`, margin, y);
+        doc.text(`DATA: ${data}`, 120, y);
+        y += 6;
+
+        // Linha 2: Início e Fim
+        doc.text(`INÍCIO: ${horaIni}`, margin, y);
+        doc.text(`TÉRMINO: ${horaFim}`, 60, y);
+        y += 6;
+
+        // Linha 3: Torre
+        doc.text(`TORRE: ${torreSel}`, margin, y);
+        y += 6;
+
+        // Linha 4: Clima
+        doc.text(`CLIMA: ${clima}`, margin, y);
+        y += 6;
+
+        // Linha 5: Recurso (Veículo) - COM QUEBRA DE LINHA
+        const recursoLabel = "RECURSO: ";
+        const recursoValue = veiculo || "---";
+        const recursoLines = doc.splitTextToSize(recursoLabel + recursoValue, maxWidth);
+        doc.text(recursoLines, margin, y);
+        y += (recursoLines.length * 5); // Aumenta Y conforme o tamanho do texto
+
+        // Linha 6: Executantes - COM QUEBRA DE LINHA
+        const execLabel = "EXECUTANTES: ";
+        const execValue = exec || "---";
+        const execLines = doc.splitTextToSize(execLabel + execValue, maxWidth);
+        doc.text(execLines, margin, y);
+        y += (execLines.length * 5) + 5; // Espaço extra antes da tabela
+
+        // Desenha o retângulo de fundo baseado na altura calculada
+        // doc.rect(14, 35, 182, y - 35); (Opcional, se quiser borda no cabeçalho inteiro)
 
         const tableBody = [];
         this.checklistItemsData.forEach(item => {
@@ -619,19 +654,19 @@ const app = {
             tableBody.push([item.id, item.text, status, comment]);
         });
         
-        // TABELA ELÁSTICA (QUEBRA DE LINHA)
+        // TABELA ELÁSTICA
         doc.autoTable({ 
-            startY: 60, 
+            startY: y, 
             head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], 
             body: tableBody, 
             theme: 'grid', 
             headStyles: { fillColor: [0, 86, 179], textColor: 255 }, 
-            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' }, // IMPORTANTE: Linebreak
+            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' }, 
             columnStyles: { 
                 0: {cellWidth: 20}, 
                 1: {cellWidth: 80}, 
                 2: {cellWidth: 20}, 
-                3: {cellWidth: 'auto'} // Ocupa o resto e quebra
+                3: {cellWidth: 'auto'}
             },
             didParseCell: function(data) { 
                 if (data.section === 'body' && data.column.index === 2) { 
