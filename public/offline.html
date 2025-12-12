@@ -4,48 +4,61 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sem Conexão - Gestão de Torres</title>
+    
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
     <style>
         body {
-            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
             text-align: center;
-            padding: 40px 20px;
-            color: #333;
-            background-color: #f4f4f9;
+            background-color: #f4f6f8;
+            padding: 20px;
+            box-sizing: border-box;
         }
-        .icon {
-            font-size: 60px;
+        .offline-icon {
+            font-size: 80px;
+            color: var(--secondary);
             margin-bottom: 20px;
         }
-        h1 {
-            color: #dc3545;
-            margin-bottom: 10px;
-        }
-        p {
-            margin-bottom: 30px;
-            line-height: 1.5;
-        }
-        button {
-            background-color: #007bff;
+        h1 { color: var(--dark); font-size: 24px; margin-bottom: 10px; }
+        p { color: #666; margin-bottom: 30px; font-size: 16px; max-width: 300px; }
+        .btn-retry {
+            background-color: var(--primary);
             color: white;
+            padding: 15px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
             border: none;
-            padding: 12px 24px;
-            font-size: 16px;
-            border-radius: 6px;
             cursor: pointer;
+            font-size: 16px;
         }
-        button:active { transform: scale(0.98); }
     </style>
 </head>
 <body>
-    <div class="icon">📡❌</div>
+
+    <span class="material-icons offline-icon">wifi_off</span>
+    
     <h1>Você está Offline</h1>
-    <p>
-        Não foi possível carregar a aplicação.<br>
-        Verifique sua conexão com a internet e tente novamente.
+    
+    <p>Não foi possível conectar ao sistema. Verifique sua conexão e tente novamente.</p>
+    
+    <button class="btn-retry" onclick="window.location.reload()">
+        <span class="material-icons">refresh</span> Tentar Novamente
+    </button>
+
+    <p style="margin-top: 30px; font-size: 12px; color: #999;">
+        Dica: Se você já fez login antes, o aplicativo deve carregar automaticamente.
     </p>
-    <p>
-        <em>Nota: Se você já acessou este app antes, feche a aba e abra novamente para carregar os dados salvos no dispositivo.</em>
-    </p>
-    <button onclick="window.location.reload()">Tentar Novamente</button>
+
 </body>
 </html>
