@@ -283,6 +283,7 @@ const app = {
                 ? `<button class="btn-card btn-edit" onclick="app.editTower(${t.id})">Editar</button>` 
                 : '';
 
+            // Layout do Card ajustado para quebrar texto longo
             div.innerHTML = `
                 <div class="card-header">
                     <strong>🔔 ${t.nome}</strong>
@@ -291,8 +292,8 @@ const app = {
                 ${alertHTML}
                 <div class="card-body">
                     <div class="info-grid">
-                        <div class="info-item"><span class="info-label">Localização</span><span class="info-value">${val(t.geral.localizacao)}</span></div>
-                        <div class="info-item"><span class="info-label">Técnico</span><span class="info-value">${val(t.geral.tecnico)}</span></div>
+                        <div class="info-item"><span class="info-label">Localização</span><span class="info-value text-break">${val(t.geral.localizacao)}</span></div>
+                        <div class="info-item"><span class="info-label">Técnico</span><span class="info-value text-break">${val(t.geral.tecnico)}</span></div>
                         <div class="info-item"><span class="info-label">Última Manut.</span><span class="info-value">${fmtDate(t.manutencao.ultima)}</span></div>
                         <div class="info-item"><span class="info-label">Comunicação</span><span class="info-value">${fmtDate(t.geral.ultimaCom)} ${fmtTime(t.geral.ultimaCom)}</span></div>
                         
@@ -300,14 +301,14 @@ const app = {
                         
                         <div class="info-item" style="grid-column: 1 / -1;">
                             <span class="info-label">Falha Detectada:</span> 
-                            <span class="info-value ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span>
+                            <span class="info-value text-break ${t.falhas.detectada ? 'text-red' : ''}">${val(t.falhas.detectada)}</span>
                         </div>
                          <div class="info-item" style="grid-column: 1 / -1;">
                             <span class="info-label">Material Pendente:</span> 
-                            <span class="info-value ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span>
+                            <span class="info-value text-break ${t.pendencias.material ? 'text-red' : ''}">${val(t.pendencias.material)}</span>
                         </div>
                     </div>
-                    ${t.observacoes ? `<div class="obs-box">"${t.observacoes}"</div>` : ''}
+                    ${t.observacoes ? `<div class="obs-box" style="word-wrap:break-word;">"${t.observacoes}"</div>` : ''}
                     ${t.fotos.length > 0 ? `<div style="margin-top:10px; color:blue; font-weight:bold">📷 ${t.fotos.length} fotos</div>` : ''}
                 </div>
                 <div class="card-footer">
@@ -332,7 +333,7 @@ const app = {
         
         const tower = {
             id: id,
-            _collection: this.collectionName, // Garante integridade
+            _collection: this.collectionName,
             nome: document.getElementById('f-nome').value,
             status: document.getElementById('f-status').value,
             geral: {
@@ -376,7 +377,7 @@ const app = {
     },
 
     // =================================================================
-    // 7. GERAÇÃO DE PDFS (COM LOGO DA ANGLO EM TODOS)
+    // 7. GERAÇÃO DE PDFS (LAYOUT ELÁSTICO)
     // =================================================================
     async drawSmartLogo(doc, base64, x, y, maxW, maxH) {
         if (!base64 || base64.length < 100) return;
@@ -396,7 +397,6 @@ const app = {
         if(!confirm(`Gerar relatório completo de ${this.currentLocation}?`)) return;
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
         
-        // CAPA - Duas Logos
         await this.drawSmartLogo(doc, this.logoEmpresa, 75, 30, 60, 30);
         await this.drawSmartLogo(doc, this.logoCliente, 140, 30, 50, 25);
 
@@ -439,7 +439,6 @@ const app = {
         if (filtered.length === 0) return alert("Sem registros.");
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
         
-        // CAPA - Duas Logos
         await this.drawSmartLogo(doc, this.logoEmpresa, 65, 20, 50, 25);
         await this.drawSmartLogo(doc, this.logoCliente, 120, 20, 50, 25);
 
@@ -454,13 +453,11 @@ const app = {
         doc.save(`Relatorio_Mensal_${mes}_${ano}.pdf`);
     },
 
+    // --- FUNÇÃO CORRIGIDA PARA NÃO EMBOLAR TEXTO (LAYOUT ELÁSTICO) ---
     async drawTowerPage(doc, t, pageNumber, totalPages) {
         doc.setFont("times", "roman");
         
-        // LOGO ESQUERDA (TECAL)
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
-        
-        // LOGO DIREITA (ANGLO) - ADICIONADA AQUI!
         await this.drawSmartLogo(doc, this.logoCliente, 160, 10, 35, 15);
         
         doc.setFontSize(10); doc.setTextColor(80);
@@ -469,27 +466,57 @@ const app = {
         
         doc.setDrawColor(0); doc.line(14, 38, 196, 38);
         
-        let y = 50; doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
+        let y = 50; 
+        doc.setFontSize(16); doc.setTextColor(0); doc.setFont("times", "bold");
         doc.text(`Detalhes: ${t.nome}`, 105, y, null, null, "center"); y += 15;
         
-        const drawSection = (title, obj) => {
-            doc.setFontSize(13); doc.setFont("times", "bold"); doc.text(title, 14, y);
-            y += 2; doc.line(14, y, 196, y); y += 6;
-            doc.setFontSize(11); doc.setFont("times", "normal");
-            Object.entries(obj).forEach(([k, v]) => {
-                let val = (v && v!=='-') ? v : '---';
-                if(k.includes('ultima') || k.includes('proxima')) { try { if(v.includes('-')) val = new Date(v).toLocaleDateString('pt-BR'); } catch(e){} }
-                doc.setFont("times", "bold"); doc.text(`${k.charAt(0).toUpperCase()+k.slice(1)}:`, 14, y);
-                doc.setFont("times", "normal"); doc.text(doc.splitTextToSize(val, 130), 60, y); y += 7;
-            });
-            y += 5;
+        // Função auxiliar que empurra o Y para baixo dinamicamente
+        const drawField = (label, value) => {
+            if(y > 270) { doc.addPage(); y = 30; } // Cria nova página se acabar espaço
+            
+            doc.setFont("times", "bold"); doc.setFontSize(11);
+            doc.text(`${label}:`, 14, y);
+            
+            let val = (value && value!=='-') ? value : '---';
+            if(label.includes('Última') || label.includes('Próxima')) { try { if(val.includes('-')) val = new Date(val).toLocaleDateString('pt-BR'); } catch(e){} }
+
+            doc.setFont("times", "normal"); 
+            // Quebra o texto em linhas para não sair da folha
+            const lines = doc.splitTextToSize(val, 130);
+            doc.text(lines, 60, y);
+            
+            // Calcula altura real do bloco de texto
+            const blockHeight = (lines.length * 5); 
+            y += Math.max(7, blockHeight + 2); // Pula o espaço necessário
         };
-        drawSection("Geral", t.geral || {}); 
-        drawSection("Falhas", t.falhas || {}); 
-        drawSection("Manutenção", t.manutencao || {}); 
-        drawSection("Pendências", t.pendencias || {});
+
+        const drawSectionHeader = (title) => {
+            if(y > 260) { doc.addPage(); y = 30; }
+            y += 5;
+            doc.setFontSize(13); doc.setFont("times", "bold"); doc.text(title, 14, y);
+            y += 2; doc.line(14, y, 196, y); y += 8;
+        };
+
+        drawSectionHeader("Geral");
+        Object.entries(t.geral).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
         
-        if(t.observacoes) { doc.setFont("times", "bold"); doc.text("Observações", 14, y); y+=6; doc.setFont("times", "italic"); doc.text(doc.splitTextToSize(t.observacoes, 180), 14, y); }
+        drawSectionHeader("Falhas");
+        Object.entries(t.falhas).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
+
+        drawSectionHeader("Manutenção");
+        Object.entries(t.manutencao).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
+
+        drawSectionHeader("Pendências");
+        Object.entries(t.pendencias).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
+        
+        if(t.observacoes) { 
+            drawSectionHeader("Observações");
+            doc.setFont("times", "italic");
+            const obsLines = doc.splitTextToSize(t.observacoes, 180);
+            doc.text(obsLines, 14, y);
+            y += (obsLines.length * 5) + 10;
+        }
+
         if(t.fotos && t.fotos.length > 0) {
             doc.addPage(); y=30; 
             await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
@@ -560,7 +587,7 @@ const app = {
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         await this.drawSmartLogo(doc, this.logoCliente, 146, 10, 50, 25);
 
-        // REMOVIDO: doc.text("SOLUÇÕES EM TECNOLOGIA", ...);
+        // AQUI: Texto removido conforme solicitado
         
         doc.setFont("helvetica", "bold"); doc.setFontSize(10);
         doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 105, 15, null, null, "center");
@@ -589,7 +616,28 @@ const app = {
             const comment = document.getElementById(`comment_${item.id}`).value;
             tableBody.push([item.id, item.text, status, comment]);
         });
-        doc.autoTable({ startY: 60, head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], body: tableBody, theme: 'grid', headStyles: { fillColor: [0, 86, 179], textColor: 255 }, styles: { fontSize: 8, cellPadding: 2 }, didParseCell: function(data) { if (data.section === 'body' && data.column.index === 2) { if (data.cell.raw === 'NOK') data.cell.styles.textColor = [200, 0, 0]; if (data.cell.raw === 'OK') data.cell.styles.textColor = [0, 100, 0]; } } });
+        
+        // Tabela Auto-Ajustável
+        doc.autoTable({ 
+            startY: 60, 
+            head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], 
+            body: tableBody, 
+            theme: 'grid', 
+            headStyles: { fillColor: [0, 86, 179], textColor: 255 }, 
+            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' }, // Permite quebra de linha
+            columnStyles: { 
+                0: {cellWidth: 20}, // Item
+                1: {cellWidth: 80}, // Atividade
+                2: {cellWidth: 20}, // Status
+                3: {cellWidth: 'auto'} // Comentários (Usa o resto e quebra linha)
+            },
+            didParseCell: function(data) { 
+                if (data.section === 'body' && data.column.index === 2) { 
+                    if (data.cell.raw === 'NOK') data.cell.styles.textColor = [200, 0, 0]; 
+                    if (data.cell.raw === 'OK') data.cell.styles.textColor = [0, 100, 0]; 
+                } 
+            } 
+        });
         
         let finalY = doc.lastAutoTable.finalY + 20; if(finalY > 250) { doc.addPage(); finalY = 40; }
         doc.text("Responsável Técnico (TECAL):", 14, finalY);
