@@ -125,12 +125,14 @@ const app = {
     },
 
     // =================================================================
-    // 4. LÓGICA DE DADOS (COM PROTEÇÃO CONTRA SOBRESCRITA)
+    // 4. LÓGICA DE DADOS BLINDADA
     // =================================================================
     async init() {
         try {
             if (!firebase.apps.length) firebase.initializeApp(this.firebaseConfig);
             this.db = firebase.firestore();
+            
+            // Abre o banco local
             this.dbLocal = await idb.openDB('gestao-torres-db', 1, {
                 upgrade(db) {
                     if (!db.objectStoreNames.contains('towers')) {
@@ -139,116 +141,109 @@ const app = {
                 },
             });
 
-            // Listener Tempo Real com Lógica de Fusão Inteligente
+            // 1. CARREGA DADOS LOCAIS PRIMEIRO (Para não ficar tela branca)
+            await this.loadFromLocal();
+
+            // 2. Conecta no Firebase
             this.db.collection(this.collectionName).onSnapshot(async (snapshot) => {
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
                 
+                let serverData = [];
                 if (!snapshot.empty) {
-                    const serverData = [];
                     snapshot.forEach(doc => {
                         let data = doc.data();
                         data._collection = this.collectionName; 
                         serverData.push(data);
                     });
-
-                    // Busca dados locais para comparar
-                    const allLocal = await this.dbLocal.getAll('towers');
-                    const myLocalData = allLocal.filter(t => t._collection === this.collectionName);
-
-                    // LÓGICA DE FUSÃO:
-                    // Se o dado Local for mais NOVO que o Servidor -> Mantém Local e Agenda Sync
-                    // Se o dado Servidor for mais NOVO que o Local -> Atualiza Local
-                    
-                    const mergedData = serverData.map(serverItem => {
-                        const localItem = myLocalData.find(l => l.id === serverItem.id);
-                        
-                        // Verifica timestamps
-                        const serverTime = new Date(serverItem.updatedAt || 0).getTime();
-                        const localTime = localItem ? new Date(localItem.updatedAt || 0).getTime() : 0;
-
-                        if (localItem && localTime > serverTime) {
-                            console.log(`[Sync] Torre ${localItem.id}: Local é mais recente. Mantendo Local.`);
-                            return localItem; // Mantém a versão local (que você editou offline)
-                        } else {
-                            return serverItem; // Aceita a versão do servidor
-                        }
-                    });
-                    
-                    this.towers = mergedData;
-                    await this.updateLocalBackup(mergedData);
-                    this.renderList();
-
-                    // Se tivermos dados locais mais novos, empurra pro servidor agora
-                    if (this.hasPendingSync(myLocalData, serverData) && navigator.onLine) {
-                        console.log("[Sync] Detectado dados pendentes. Enviando para nuvem...");
-                        this.syncNow(true); // true = silencioso
-                    }
-
-                } else {
-                    this.checkDataIntegrity();
                 }
+
+                // 3. FUSÃO INTELIGENTE (Prioridade para o Local se estiver 'pending')
+                await this.mergeData(serverData);
+
             }, (error) => {
-                console.log("Modo Offline ativo.");
+                console.log("Modo Offline (Snapshot falhou). Mantendo dados locais.");
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
-                this.loadFromLocal();
             });
 
         } catch (e) {
             console.error("Erro init:", e);
+            // Em caso de erro grave, garante que o local carregue
             this.loadFromLocal();
         }
 
-        this.updateOnlineStatus();
-        
-        // Quando a internet voltar, tenta sincronizar o que foi feito offline
-        window.addEventListener('online', () => {
-            this.updateOnlineStatus();
-            if(this.userRole === 'admin') {
-                console.log("[Online] Tentando sincronizar pendências...");
-                this.syncNow(true);
-            }
-        });
-        
-        window.addEventListener('offline', () => this.updateOnlineStatus());
+        this.setupConnectivityListeners();
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
     },
 
-    // Verifica se existe algo local mais novo que no servidor
-    hasPendingSync(localList, serverList) {
-        return localList.some(localItem => {
-            const serverItem = serverList.find(s => s.id === localItem.id);
-            if (!serverItem) return true; // Novo item criado offline
-            const localTime = new Date(localItem.updatedAt || 0).getTime();
-            const serverTime = new Date(serverItem.updatedAt || 0).getTime();
-            return localTime > serverTime;
-        });
-    },
+    // FUNÇÃO CERÉBRO: Decide quem ganha (Local vs Servidor)
+    async mergeData(serverData) {
+        // Pega o que temos no celular agora
+        const allLocal = await this.dbLocal.getAll('towers');
+        const myLocalData = allLocal.filter(t => t._collection === this.collectionName);
 
-    async checkDataIntegrity() {
-        const allData = await this.dbLocal.getAll('towers');
-        const currentLocData = allData.filter(t => t._collection === this.collectionName);
-
-        if (currentLocData.length > 0) {
-            this.towers = currentLocData;
-            // Se abriu e estava vazio no server, mas cheio no local -> Sobe tudo
-            if(navigator.onLine && this.userRole === 'admin') this.syncNow();
-        } else {
-            await this.seedDatabase(); 
+        if (serverData.length === 0 && myLocalData.length === 0) {
+            // Se ambos vazios, cria do zero
+            this.checkDataIntegrity();
+            return;
         }
+
+        const mergedTowers = [];
+        const idsProcessed = new Set();
+
+        // Itera sobre dados locais (Nossa prioridade se estiver pendente)
+        for (const localItem of myLocalData) {
+            idsProcessed.add(localItem.id);
+            const serverItem = serverData.find(s => s.id === localItem.id);
+
+            if (localItem._syncStatus === 'pending') {
+                console.log(`[Sync] Torre ${localItem.id} tem alterações locais pendentes. Ignorando servidor.`);
+                mergedTowers.push(localItem); // Mantém o local
+            } else if (serverItem) {
+                // Se não está pendente, aceita o do servidor se for mais novo ou igual
+                mergedTowers.push(serverItem);
+            } else {
+                // Existe no local mas não no server (e não está pendente)? Estranho, mas mantém.
+                mergedTowers.push(localItem);
+            }
+        }
+
+        // Adiciona itens que só existem no servidor (novas torres criadas por outros)
+        for (const serverItem of serverData) {
+            if (!idsProcessed.has(serverItem.id)) {
+                mergedTowers.push(serverItem);
+            }
+        }
+
+        this.towers = mergedTowers;
+        await this.updateLocalBackup(this.towers); // Salva a fusão no IDB
         this.renderList();
+
+        // Se tem pendências, tenta subir agora
+        if (navigator.onLine) this.syncNow(true);
     },
 
     async loadFromLocal() {
-        document.getElementById('loading-msg').style.display = 'none';
         if (!this.dbLocal) return;
-
         const allData = await this.dbLocal.getAll('towers');
-        this.towers = allData.filter(t => t._collection === this.collectionName);
+        const myData = allData.filter(t => t._collection === this.collectionName);
         
-        if(this.towers.length === 0) await this.seedDatabase();
-        this.renderList();
+        if(myData.length > 0) {
+            this.towers = myData;
+            this.renderList();
+        }
+        document.getElementById('loading-msg').style.display = 'none';
+    },
+
+    async checkDataIntegrity() {
+        // Só roda se realmente não tiver nada em lugar nenhum
+        const allData = await this.dbLocal.getAll('towers');
+        const currentLocData = allData.filter(t => t._collection === this.collectionName);
+
+        if (currentLocData.length === 0) {
+            await this.seedDatabase(); 
+        }
     },
 
     async updateLocalBackup(data) {
@@ -282,6 +277,7 @@ const app = {
             const tower = {
                 id: i,
                 _collection: this.collectionName,
+                _syncStatus: 'synced', // Nasce sincronizado
                 nome: `ER ${idStr}`,
                 status: "Operando",
                 geral: { localizacao: "", prioridade: "Média", tecnico: "", ultimaCom: "" },
@@ -301,13 +297,127 @@ const app = {
         await this.updateLocalBackup(this.towers);
         
         if(batch && this.userRole === 'admin') {
-            try { await batch.commit(); } catch(e) { console.log("Salvo apenas localmente (Offline)"); }
+            try { await batch.commit(); } catch(e) { console.log("Offline: Seed salvo localmente."); }
         }
         this.renderList();
     },
 
     // =================================================================
-    // 5. RENDERIZAÇÃO
+    // 5. SALVAR DADOS (COM FLAG DE PENDENTE)
+    // =================================================================
+    async saveTower(e) {
+        if(this.userRole !== 'admin') return alert("Apenas Admin pode salvar!");
+        e.preventDefault();
+        const id = parseInt(document.getElementById('tower-id').value);
+        
+        const tower = {
+            id: id,
+            _collection: this.collectionName,
+            _syncStatus: 'pending', // <--- MARCA COMO PENDENTE IMEDIATAMENTE
+            nome: document.getElementById('f-nome').value,
+            status: document.getElementById('f-status').value,
+            geral: {
+                localizacao: document.getElementById('f-geral-local').value,
+                prioridade: document.getElementById('f-geral-prio').value,
+                tecnico: document.getElementById('f-geral-tec').value,
+                ultimaCom: document.getElementById('f-geral-ultimacom').value
+            },
+            falhas: {
+                detectada: document.getElementById('f-falhas-detectada').value,
+                historico: document.getElementById('f-falhas-historico').value,
+                acao: document.getElementById('f-falhas-acao').value
+            },
+            manutencao: {
+                ultima: document.getElementById('f-manu-ultima').value,
+                proxima: document.getElementById('f-manu-proxima').value,
+                custo: document.getElementById('f-manu-custo').value,
+                pecas: document.getElementById('f-manu-pecas').value
+            },
+            pendencias: {
+                servico: document.getElementById('f-pend-servico').value,
+                material: document.getElementById('f-pend-material').value
+            },
+            observacoes: document.getElementById('f-obs').value,
+            fotos: this.tempPhotos,
+            updatedAt: new Date().toISOString()
+        };
+
+        // 1. Atualiza memória e UI
+        const index = this.towers.findIndex(t => t.id === id);
+        if(index !== -1) this.towers[index] = tower;
+        this.renderList();
+        
+        // 2. Salva no Local (IDB) como PENDENTE
+        // Isso garante que se o app recarregar agora, ele sabe que esse dado é o mestre
+        await this.updateLocalBackup(this.towers);
+        this.closeModal();
+
+        // 3. Tenta enviar para nuvem
+        this.syncSingleTower(tower);
+    },
+
+    // Tenta enviar uma torre específica
+    async syncSingleTower(tower) {
+        if (navigator.onLine && this.db) {
+            try {
+                // Tenta gravar no Firebase
+                const dataToSend = {...tower};
+                delete dataToSend._syncStatus; // Não precisamos mandar essa flag pro servidor
+
+                await this.db.collection(this.collectionName).doc(String(tower.id)).set(dataToSend);
+                
+                // SUCESSO: Marca como sincronizado no local
+                tower._syncStatus = 'synced';
+                const index = this.towers.findIndex(t => t.id === tower.id);
+                if(index !== -1) this.towers[index] = tower;
+                await this.updateLocalBackup(this.towers);
+                console.log("Sincronizado com sucesso:", tower.nome);
+                this.renderList(); // Atualiza para remover ícone de pendente se tiver
+
+            } catch (error) { 
+                console.error("Erro ao salvar na nuvem (ficará pendente):", error); 
+            }
+        } else {
+            console.log("Offline: Salvo localmente como pendente.");
+        }
+    },
+
+    // Sincroniza tudo que está pendente (Chamado ao conectar)
+    async syncNow(silent = false) { 
+        if(!navigator.onLine || !this.db || this.userRole !== 'admin') return;
+
+        const pending = this.towers.filter(t => t._syncStatus === 'pending');
+        if (pending.length === 0) {
+            if(!silent) alert("Tudo sincronizado!");
+            return;
+        }
+
+        if(!silent) alert(`Sincronizando ${pending.length} itens...`);
+        
+        for (const tower of pending) {
+            await this.syncSingleTower(tower);
+        }
+    },
+
+    setupConnectivityListeners() {
+        const el = document.getElementById('connection-status');
+        const updateStatus = () => {
+            if (navigator.onLine) {
+                el.innerText = "Online";
+                el.className = "status-badge online";
+                if(this.userRole === 'admin') this.syncNow(true); // Auto-sync ao voltar
+            } else {
+                el.innerText = "Offline";
+                el.className = "status-badge offline";
+            }
+        };
+        window.addEventListener('online', updateStatus);
+        window.addEventListener('offline', updateStatus);
+        updateStatus();
+    },
+
+    // =================================================================
+    // 6. RENDERIZAÇÃO
     // =================================================================
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
@@ -320,6 +430,11 @@ const app = {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
             
+            // Indicador visual de que está pendente de envio
+            const syncIcon = t._syncStatus === 'pending' 
+                ? `<span style="color:orange; font-size:12px; float:right;">🟠 Pendente Envio</span>` 
+                : '';
+
             const hasAlert = (t.pendencias.material && t.pendencias.material.length > 1) || 
                              (t.pendencias.servico && t.pendencias.servico.length > 1) || 
                              (t.falhas.detectada && t.falhas.detectada.length > 1) ||
@@ -338,7 +453,7 @@ const app = {
             div.innerHTML = `
                 <div class="card-header">
                     <strong>🔔 ${t.nome}</strong>
-                    <span class="status-pill">${t.status}</span>
+                    <div>${syncIcon} <span class="status-pill">${t.status}</span></div>
                 </div>
                 ${alertHTML}
                 <div class="card-body">
@@ -375,62 +490,7 @@ const app = {
     },
 
     // =================================================================
-    // 6. SALVAR DADOS
-    // =================================================================
-    async saveTower(e) {
-        if(this.userRole !== 'admin') return alert("Apenas Admin pode salvar!");
-        e.preventDefault();
-        const id = parseInt(document.getElementById('tower-id').value);
-        
-        const tower = {
-            id: id,
-            _collection: this.collectionName,
-            nome: document.getElementById('f-nome').value,
-            status: document.getElementById('f-status').value,
-            geral: {
-                localizacao: document.getElementById('f-geral-local').value,
-                prioridade: document.getElementById('f-geral-prio').value,
-                tecnico: document.getElementById('f-geral-tec').value,
-                ultimaCom: document.getElementById('f-geral-ultimacom').value
-            },
-            falhas: {
-                detectada: document.getElementById('f-falhas-detectada').value,
-                historico: document.getElementById('f-falhas-historico').value,
-                acao: document.getElementById('f-falhas-acao').value
-            },
-            manutencao: {
-                ultima: document.getElementById('f-manu-ultima').value,
-                proxima: document.getElementById('f-manu-proxima').value,
-                custo: document.getElementById('f-manu-custo').value,
-                pecas: document.getElementById('f-manu-pecas').value
-            },
-            pendencias: {
-                servico: document.getElementById('f-pend-servico').value,
-                material: document.getElementById('f-pend-material').value
-            },
-            observacoes: document.getElementById('f-obs').value,
-            fotos: this.tempPhotos,
-            updatedAt: new Date().toISOString() // DATA MAIS RECENTE = GANHA A SINCRONIZAÇÃO
-        };
-
-        const index = this.towers.findIndex(t => t.id === id);
-        if(index !== -1) this.towers[index] = tower;
-        
-        // 1. Salva no Local (IDB) Imediatamente
-        await this.updateLocalBackup(this.towers);
-
-        this.closeModal();
-        this.renderList();
-
-        // 2. Tenta salvar no Firebase se tiver internet
-        if (navigator.onLine && this.db) {
-            try { await this.db.collection(this.collectionName).doc(String(id)).set(tower); }
-            catch (error) { console.error("Erro ao salvar no Firebase (será sincronizado depois):", error); }
-        }
-    },
-
-    // =================================================================
-    // 7. GERAÇÃO DE PDFS
+    // 7. GERAÇÃO DE PDFS (COM LAYOUT ELÁSTICO)
     // =================================================================
     drawCenteredText(doc, text, y, size = 12, style = "normal") {
         doc.setFont("times", style); doc.setFontSize(size);
@@ -520,7 +580,6 @@ const app = {
         doc.setFontSize(10); doc.setTextColor(80);
         doc.text(`Relatório: ${t.nome} (${this.currentLocation})`, 196, 30, null, null, "right");
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 196, 35, null, null, "right");
-        
         doc.setDrawColor(0); doc.line(14, 38, 196, 38);
         
         let y = 50; 
@@ -590,7 +649,7 @@ const app = {
     },
 
     // =================================================================
-    // 8. CHECKLIST
+    // 8. CHECKLIST (COM LOGOS E SEM SUBTITULO)
     // =================================================================
     openChecklist() { 
         if(this.userRole !== 'admin') return alert("Acesso Restrito!");
@@ -640,7 +699,6 @@ const app = {
         await this.drawSmartLogo(doc, this.logoEmpresa, 14, 10, 30, 15);
         await this.drawSmartLogo(doc, this.logoCliente, 146, 10, 50, 25);
 
-        // CABEÇALHO
         doc.setFont("helvetica", "bold"); doc.setFontSize(10);
         doc.text("PLANO DE MANUTENÇÃO PREVENTIVA", 105, 15, null, null, "center");
         doc.text("SISTEMA DE NOTIFICAÇÃO EM MASSA", 105, 20, null, null, "center");
@@ -654,7 +712,6 @@ const app = {
         const clima = document.getElementById('chk-clima').value;
         const veiculo = document.getElementById('chk-recurso').value;
         const exec = document.getElementById('chk-executantes').value;
-        
         const torreSel = document.getElementById('chk-torre').value;
 
         // CABEÇALHO ELÁSTICO
@@ -681,7 +738,7 @@ const app = {
             tableBody.push([item.id, item.text, status, comment]);
         });
         
-        // TABELA
+        // TABELA ELÁSTICA
         doc.autoTable({ 
             startY: y+20 + (recLines.length*5) + (execLines.length*5), 
             head: [['ITEM', 'ATIVIDADE', 'STATUS', 'COMENTÁRIOS']], 
@@ -711,7 +768,7 @@ const app = {
     },
 
     // =================================================================
-    // 9. UTILS (SINCRONIZAÇÃO INTELIGENTE)
+    // 9. UTILS
     // =================================================================
     filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
     closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
@@ -733,28 +790,8 @@ const app = {
     resizeImage(file, w, h, cb) { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',0.8)); }; }; },
     renderImagePreviews() { const c = document.getElementById('image-preview-container'); c.innerHTML = ''; this.tempPhotos.forEach((src, i) => { const d = document.createElement('div'); d.className='photo-wrapper'; d.innerHTML = `<img src="${src}" class="img-preview" onclick="window.open('${src}')"><div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>`; c.appendChild(d); }); },
     removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
-    
-    // SYNC MANUAL OU AUTOMÁTICO
-    syncNow(silent = false) { 
-        if(navigator.onLine && this.db && this.userRole === 'admin') { 
-            this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t)); 
-            if(!silent) alert("Sincronizando com a Nuvem..."); 
-        } else { 
-            if(!silent) alert("Sem internet ou permissão."); 
-        } 
-    },
+    syncNow() { if(navigator.onLine && this.db && this.userRole === 'admin') { this.towers.forEach(t => this.db.collection(this.collectionName).doc(String(t.id)).set(t)); alert("Sincronizando..."); } else { alert("Sem internet ou permissão."); } },
     updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; }
 };
 
-window.onload = () => {
-    // Tenta desregistrar service workers antigos para garantir atualização em DEV
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-            for(let registration of registrations) {
-                registration.unregister();
-            }
-        });
-    }
-    // Inicia o App
-    app.initApp();
-};
+window.onload = () => app.initApp();
