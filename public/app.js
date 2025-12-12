@@ -125,12 +125,14 @@ const app = {
     },
 
     // =================================================================
-    // 4. LÓGICA DE DADOS
+    // 4. LÓGICA DE DADOS BLINDADA
     // =================================================================
     async init() {
+        // Timeout de segurança para remover loader
         setTimeout(() => {
             const loading = document.getElementById('loading-msg');
             if(loading && loading.style.display !== 'none') {
+                console.log("Timeout de rede: Forçando exibição offline.");
                 loading.style.display = 'none';
             }
         }, 3000);
@@ -147,8 +149,10 @@ const app = {
                 },
             });
 
+            // 1. CARREGA DADOS LOCAIS IMEDIATAMENTE
             await this.loadFromLocal();
 
+            // 2. Conecta ao Firebase
             this.db.collection(this.collectionName).onSnapshot(async (snapshot) => {
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
@@ -161,10 +165,12 @@ const app = {
                         serverData.push(data);
                     });
                 }
+
+                // 3. FUSÃO INTELIGENTE
                 await this.mergeData(serverData);
 
             }, (error) => {
-                console.log("Offline.");
+                console.log("Modo Offline (Snapshot falhou).");
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
             });
@@ -196,9 +202,12 @@ const app = {
             idsProcessed.add(localItem.id);
             const serverItem = serverData.find(s => s.id === localItem.id);
 
+            // Prioridade para LOCAL se estiver pendente
             if (localItem._syncStatus === 'pending') {
+                console.log(`[Sync] Torre ${localItem.id} pendente. Mantendo Local.`);
                 mergedTowers.push(localItem); 
             } else if (serverItem) {
+                // Se não pendente, compara datas (Servidor ganha, a menos que local seja muito mais novo)
                 const serverTime = new Date(serverItem.updatedAt || 0).getTime();
                 const localTime = new Date(localItem.updatedAt || 0).getTime();
                 
@@ -212,6 +221,7 @@ const app = {
             }
         }
 
+        // Adiciona itens exclusivos do servidor
         for (const serverItem of serverData) {
             if (!idsProcessed.has(serverItem.id)) {
                 mergedTowers.push(serverItem);
@@ -222,8 +232,8 @@ const app = {
         await this.updateLocalBackup(this.towers); 
         this.renderList();
 
-        // Auto-sync silencioso se houver pendências
-        if (navigator.onLine) this.syncNow(true); 
+        // Tenta sincronizar pendências silenciosamente
+        if (navigator.onLine) this.syncNow(true);
     },
 
     async loadFromLocal() {
@@ -299,13 +309,13 @@ const app = {
         await this.updateLocalBackup(this.towers);
         
         if(batch && this.userRole === 'admin') {
-            try { await batch.commit(); } catch(e) {}
+            try { await batch.commit(); } catch(e) { console.log("Offline: Seed salvo localmente."); }
         }
         this.renderList();
     },
 
     // =================================================================
-    // 5. SALVAR E SINCRONIZAR
+    // 5. SALVAR DADOS
     // =================================================================
     async saveTower(e) {
         if(this.userRole !== 'admin') return alert("Apenas Admin pode salvar!");
@@ -315,7 +325,7 @@ const app = {
         const tower = {
             id: id,
             _collection: this.collectionName,
-            _syncStatus: 'pending', // Fica pendente até confirmar upload
+            _syncStatus: 'pending', // Marca como pendente
             nome: document.getElementById('f-nome').value,
             status: document.getElementById('f-status').value,
             geral: {
@@ -346,18 +356,18 @@ const app = {
 
         const index = this.towers.findIndex(t => t.id === id);
         if(index !== -1) this.towers[index] = tower;
+        this.renderList();
         
         await this.updateLocalBackup(this.towers);
         this.closeModal();
-        this.renderList();
 
-        // Tenta enviar. Se tiver net, vai atualizar e remover a flag pending
+        // Tenta enviar. Se tiver net, envia silencioso.
         if(navigator.onLine) {
-            this.syncNow(true); // true = silencioso (não abre popup, pois acabou de editar)
+            this.syncNow(true); 
         }
     },
 
-    // --- NOVA LÓGICA DE UI DE SINCRONIZAÇÃO ---
+    // --- SINCRONIZAÇÃO COM TELA DE BLOQUEIO ---
     toggleSyncScreen(show, success = false) {
         const screen = document.getElementById('sync-screen');
         const spinner = document.getElementById('sync-spinner');
@@ -412,10 +422,9 @@ const app = {
             return;
         }
 
-        // Se for manual (clicou no botão), mostra tela de bloqueio
+        // Mostra tela se não for silencioso
         if(!silent) this.toggleSyncScreen(true, false);
 
-        // Processa todos os pendentes
         for (const tower of pending) {
             const success = await this.syncSingleTower(tower);
             if(success) {
@@ -424,14 +433,14 @@ const app = {
             }
         }
 
-        // Salva estado atualizado (sem flags pendentes) no local
+        // Salva estado atualizado no local
         await this.updateLocalBackup(this.towers);
         this.renderList();
 
         // Finaliza tela
         if(!silent) {
-            this.toggleSyncScreen(true, true); // Mostra sucesso
-            setTimeout(() => this.toggleSyncScreen(false), 2000); // Fecha após 2s
+            this.toggleSyncScreen(true, true); 
+            setTimeout(() => this.toggleSyncScreen(false), 1500); 
         }
     },
 
@@ -469,6 +478,7 @@ const app = {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
             
+            // Ícone de Pendente
             const syncIcon = t._syncStatus === 'pending' 
                 ? `<span style="color:#fd7e14; font-weight:bold; font-size:11px; float:right; background:#fff3cd; padding:2px 6px; border-radius:4px;">🟠 Pendente</span>` 
                 : '';
@@ -528,7 +538,7 @@ const app = {
     },
 
     // =================================================================
-    // 7. PDFS
+    // 7. GERAÇÃO DE PDFS
     // =================================================================
     drawCenteredText(doc, text, y, size = 12, style = "normal") {
         doc.setFont("times", style); doc.setFontSize(size);
@@ -625,12 +635,17 @@ const app = {
         
         const drawField = (label, value) => {
             if(y > 270) { doc.addPage(); y = 30; } 
-            doc.setFont("times", "bold"); doc.setFontSize(11); doc.text(`${label}:`, 14, y);
+            
+            doc.setFont("times", "bold"); doc.setFontSize(11);
+            doc.text(`${label}:`, 14, y);
+            
             let val = (value && value!=='-') ? value : '---';
             if(label.includes('Última') || label.includes('Próxima')) { try { if(val.includes('-')) val = new Date(val).toLocaleDateString('pt-BR'); } catch(e){} }
+
             doc.setFont("times", "normal"); 
             const lines = doc.splitTextToSize(val, 130);
             doc.text(lines, 60, y);
+            
             y += Math.max(7, (lines.length * 5) + 2); 
         };
 
@@ -801,7 +816,9 @@ const app = {
         doc.save(`Checklist_${this.currentLocation}_${data}.pdf`);
     },
 
-    // UTILS
+    // =================================================================
+    // 9. UTILS E IMAGEM OTIMIZADA
+    // =================================================================
     filterList() { const term = document.getElementById('search').value.toLowerCase(); this.renderList(this.towers.filter(t => t.nome.toLowerCase().includes(term))); },
     closeModal() { document.getElementById('modal').style.display = 'none'; this.tempPhotos = []; },
     editTower(id) { 
@@ -809,6 +826,7 @@ const app = {
         this.tempPhotos = [...t.fotos] || [];
         document.getElementById('tower-form').reset();
         document.getElementById('image-preview-container').innerHTML = '';
+        
         document.getElementById('tower-id').value = t.id; document.getElementById('f-nome').value = t.nome; document.getElementById('f-status').value = t.status;
         document.getElementById('f-geral-local').value = t.geral.localizacao; document.getElementById('f-geral-prio').value = t.geral.prioridade; document.getElementById('f-geral-tec').value = t.geral.tecnico; document.getElementById('f-geral-ultimacom').value = t.geral.ultimaCom;
         document.getElementById('f-falhas-detectada').value = t.falhas.detectada; document.getElementById('f-falhas-historico').value = t.falhas.historico; document.getElementById('f-falhas-acao').value = t.falhas.acao;
@@ -817,10 +835,59 @@ const app = {
         document.getElementById('f-obs').value = t.observacoes;
         this.renderImagePreviews(); document.getElementById('modal').style.display = 'block';
     },
-    handleImagePreview(e) { Array.from(e.target.files).forEach(file => { this.resizeImage(file, 1280, 1280, (b64) => { this.tempPhotos.push(b64); this.renderImagePreviews(); }); }); },
-    resizeImage(file, w, h, cb) { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = (e) => { const img = new Image(); img.src = e.target.result; img.onload = () => { const c = document.createElement('canvas'); let r = Math.min(w/img.width, h/img.height); c.width=img.width*r; c.height=img.height*r; c.getContext('2d').drawImage(img,0,0,c.width,c.height); cb(c.toDataURL('image/jpeg',0.8)); }; }; },
+    handleImagePreview(e) { Array.from(e.target.files).forEach(file => { this.resizeImage(file, 800, 800, (b64) => { this.tempPhotos.push(b64); this.renderImagePreviews(); }); }); },
+    
+    // REDIMENSIONAMENTO AGRESSIVO (800PX e 0.5 Qualidade)
+    resizeImage(file, w, h, cb) { 
+        const reader = new FileReader(); 
+        reader.readAsDataURL(file); 
+        reader.onload = (e) => { 
+            const img = new Image(); 
+            img.src = e.target.result; 
+            img.onload = () => { 
+                const c = document.createElement('canvas'); 
+                let r = Math.min(w/img.width, h/img.height); 
+                c.width = img.width * r; 
+                c.height = img.height * r; 
+                const ctx = c.getContext('2d');
+                ctx.drawImage(img, 0, 0, c.width, c.height); 
+                cb(c.toDataURL('image/jpeg', 0.5)); 
+            }; 
+        }; 
+    },
+    
     renderImagePreviews() { const c = document.getElementById('image-preview-container'); c.innerHTML = ''; this.tempPhotos.forEach((src, i) => { const d = document.createElement('div'); d.className='photo-wrapper'; d.innerHTML = `<img src="${src}" class="img-preview" onclick="window.open('${src}')"><div class="btn-delete-photo" onclick="app.removePhoto(${i})">&times;</div>`; c.appendChild(d); }); },
     removePhoto(i) { this.tempPhotos.splice(i, 1); this.renderImagePreviews(); },
+    
+    // SYNC MANUAL OU AUTOMÁTICO
+    syncNow(silent = false) { 
+        if(!navigator.onLine || !this.db || this.userRole !== 'admin') {
+            if(!silent) alert("Sem conexão ou permissão.");
+            return;
+        }
+
+        const pending = this.towers.filter(t => t._syncStatus === 'pending');
+        if (pending.length === 0) {
+            if(!silent) alert("Tudo sincronizado!");
+            return;
+        }
+
+        if(!silent) this.toggleSyncScreen(true, false);
+
+        (async () => {
+            for (const tower of pending) {
+                await this.syncSingleTower(tower);
+            }
+            // Atualiza UI para remover flags pendentes
+            this.renderList();
+            
+            if(!silent) {
+                this.toggleSyncScreen(true, true);
+                setTimeout(() => this.toggleSyncScreen(false), 2000);
+            }
+        })();
+    },
+    
     updateOnlineStatus() { const el = document.getElementById('connection-status'); el.innerText = navigator.onLine ? "Online" : "Offline"; el.className = navigator.onLine ? "status-badge online" : "status-badge offline"; }
 };
 
