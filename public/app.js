@@ -125,14 +125,12 @@ const app = {
     },
 
     // =================================================================
-    // 4. LÓGICA DE DADOS BLINDADA
+    // 4. LÓGICA DE DADOS
     // =================================================================
     async init() {
-        // Timeout de segurança para remover loader
         setTimeout(() => {
             const loading = document.getElementById('loading-msg');
             if(loading && loading.style.display !== 'none') {
-                console.log("Timeout de rede: Forçando exibição offline.");
                 loading.style.display = 'none';
             }
         }, 3000);
@@ -149,10 +147,8 @@ const app = {
                 },
             });
 
-            // 1. CARREGA DADOS LOCAIS IMEDIATAMENTE
             await this.loadFromLocal();
 
-            // 2. Conecta ao Firebase
             this.db.collection(this.collectionName).onSnapshot(async (snapshot) => {
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
@@ -165,12 +161,10 @@ const app = {
                         serverData.push(data);
                     });
                 }
-
-                // 3. FUSÃO INTELIGENTE
                 await this.mergeData(serverData);
 
             }, (error) => {
-                console.log("Modo Offline (Snapshot falhou).");
+                console.log("Offline.");
                 const loading = document.getElementById('loading-msg');
                 if(loading) loading.style.display = 'none';
             });
@@ -202,12 +196,9 @@ const app = {
             idsProcessed.add(localItem.id);
             const serverItem = serverData.find(s => s.id === localItem.id);
 
-            // Prioridade para LOCAL se estiver pendente
             if (localItem._syncStatus === 'pending') {
-                console.log(`[Sync] Torre ${localItem.id} pendente. Mantendo Local.`);
                 mergedTowers.push(localItem); 
             } else if (serverItem) {
-                // Se não pendente, compara datas (Servidor ganha, a menos que local seja muito mais novo)
                 const serverTime = new Date(serverItem.updatedAt || 0).getTime();
                 const localTime = new Date(localItem.updatedAt || 0).getTime();
                 
@@ -221,7 +212,6 @@ const app = {
             }
         }
 
-        // Adiciona itens exclusivos do servidor
         for (const serverItem of serverData) {
             if (!idsProcessed.has(serverItem.id)) {
                 mergedTowers.push(serverItem);
@@ -232,8 +222,7 @@ const app = {
         await this.updateLocalBackup(this.towers); 
         this.renderList();
 
-        // Tenta sincronizar pendências silenciosamente
-        if (navigator.onLine) this.syncNow(true);
+        if (navigator.onLine) this.syncNow(true); 
     },
 
     async loadFromLocal() {
@@ -309,7 +298,7 @@ const app = {
         await this.updateLocalBackup(this.towers);
         
         if(batch && this.userRole === 'admin') {
-            try { await batch.commit(); } catch(e) { console.log("Offline: Seed salvo localmente."); }
+            try { await batch.commit(); } catch(e) {}
         }
         this.renderList();
     },
@@ -325,7 +314,7 @@ const app = {
         const tower = {
             id: id,
             _collection: this.collectionName,
-            _syncStatus: 'pending', // Marca como pendente
+            _syncStatus: 'pending', 
             nome: document.getElementById('f-nome').value,
             status: document.getElementById('f-status').value,
             geral: {
@@ -361,13 +350,11 @@ const app = {
         await this.updateLocalBackup(this.towers);
         this.closeModal();
 
-        // Tenta enviar. Se tiver net, envia silencioso.
         if(navigator.onLine) {
             this.syncNow(true); 
         }
     },
 
-    // --- SINCRONIZAÇÃO COM TELA DE BLOQUEIO ---
     toggleSyncScreen(show, success = false) {
         const screen = document.getElementById('sync-screen');
         const spinner = document.getElementById('sync-spinner');
@@ -401,7 +388,6 @@ const app = {
 
             await this.db.collection(this.collectionName).doc(String(tower.id)).set(dataToSend);
             
-            // Sucesso: Remove flag pendente
             tower._syncStatus = 'synced';
             return true;
         } catch (error) { 
@@ -422,7 +408,6 @@ const app = {
             return;
         }
 
-        // Mostra tela se não for silencioso
         if(!silent) this.toggleSyncScreen(true, false);
 
         for (const tower of pending) {
@@ -433,11 +418,9 @@ const app = {
             }
         }
 
-        // Salva estado atualizado no local
         await this.updateLocalBackup(this.towers);
         this.renderList();
 
-        // Finaliza tela
         if(!silent) {
             this.toggleSyncScreen(true, true); 
             setTimeout(() => this.toggleSyncScreen(false), 1500); 
@@ -462,7 +445,7 @@ const app = {
     },
 
     // =================================================================
-    // 6. RENDERIZAÇÃO
+    // 6. RENDERIZAÇÃO (COM CORREÇÃO DE DATA)
     // =================================================================
     renderList(list = this.towers) {
         const container = document.getElementById('tower-list');
@@ -478,7 +461,6 @@ const app = {
             const div = document.createElement('div');
             div.className = `card st-${t.status.replace(' ','')}`;
             
-            // Ícone de Pendente
             const syncIcon = t._syncStatus === 'pending' 
                 ? `<span style="color:#fd7e14; font-weight:bold; font-size:11px; float:right; background:#fff3cd; padding:2px 6px; border-radius:4px;">🟠 Pendente</span>` 
                 : '';
@@ -490,7 +472,9 @@ const app = {
             
             const alertHTML = hasAlert ? `<div class="warning-alert">⚠️ Pendências encontradas</div>` : '';
 
-            const fmtDate = (d) => (d && d.length > 5) ? new Date(d).toLocaleDateString('pt-BR') : '-';
+            // CORREÇÃO DATA: Adiciona 'T12:00:00' para forçar o meio-dia e evitar problema de fuso
+            const fmtDate = (d) => (d && d.length > 5) ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '-';
+            
             const fmtTime = (d) => (d && d.length > 5) ? new Date(d).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '';
             const val = (v) => (v && v.length > 0) ? v : '-';
 
@@ -538,7 +522,7 @@ const app = {
     },
 
     // =================================================================
-    // 7. GERAÇÃO DE PDFS
+    // 7. GERAÇÃO DE PDFS (COM CORREÇÃO DE DATA NO PDF TAMBÉM)
     // =================================================================
     drawCenteredText(doc, text, y, size = 12, style = "normal") {
         doc.setFont("times", style); doc.setFontSize(size);
@@ -598,7 +582,8 @@ const app = {
         const [mes, ano] = input.split('/'); if (!mes || !ano) return alert("Erro no formato.");
         const filtered = this.towers.filter(t => {
             if (!t.manutencao.ultima) return false;
-            const d = new Date(t.manutencao.ultima); d.setHours(12);
+            // Aqui usamos T12:00:00 também para garantir que o filtro pegue o mês certo
+            const d = new Date(t.manutencao.ultima + 'T12:00:00'); 
             return (d.getMonth() + 1) == parseInt(mes) && d.getFullYear() == parseInt(ano);
         });
         if (filtered.length === 0) return alert("Sem registros.");
@@ -640,7 +625,15 @@ const app = {
             doc.text(`${label}:`, 14, y);
             
             let val = (value && value!=='-') ? value : '---';
-            if(label.includes('Última') || label.includes('Próxima')) { try { if(val.includes('-')) val = new Date(val).toLocaleDateString('pt-BR'); } catch(e){} }
+            
+            // CORREÇÃO DATA NO PDF
+            if(label.includes('Última') || label.includes('Próxima')) { 
+                try { 
+                    if(val.includes('-') && val.length === 10) { // Garante que é YYYY-MM-DD
+                        val = new Date(val + 'T12:00:00').toLocaleDateString('pt-BR'); 
+                    } 
+                } catch(e){} 
+            }
 
             doc.setFont("times", "normal"); 
             const lines = doc.splitTextToSize(val, 130);
@@ -658,10 +651,13 @@ const app = {
 
         drawSectionHeader("Geral");
         Object.entries(t.geral).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
+        
         drawSectionHeader("Falhas");
         Object.entries(t.falhas).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
+
         drawSectionHeader("Manutenção");
         Object.entries(t.manutencao).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
+
         drawSectionHeader("Pendências");
         Object.entries(t.pendencias).forEach(([k,v]) => drawField(k.charAt(0).toUpperCase()+k.slice(1), v));
         
@@ -826,7 +822,6 @@ const app = {
         this.tempPhotos = [...t.fotos] || [];
         document.getElementById('tower-form').reset();
         document.getElementById('image-preview-container').innerHTML = '';
-        
         document.getElementById('tower-id').value = t.id; document.getElementById('f-nome').value = t.nome; document.getElementById('f-status').value = t.status;
         document.getElementById('f-geral-local').value = t.geral.localizacao; document.getElementById('f-geral-prio').value = t.geral.prioridade; document.getElementById('f-geral-tec').value = t.geral.tecnico; document.getElementById('f-geral-ultimacom').value = t.geral.ultimaCom;
         document.getElementById('f-falhas-detectada').value = t.falhas.detectada; document.getElementById('f-falhas-historico').value = t.falhas.historico; document.getElementById('f-falhas-acao').value = t.falhas.acao;
